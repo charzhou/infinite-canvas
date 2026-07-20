@@ -21,11 +21,17 @@ type SeedanceTask = {
     result_url?: string;
     video_url?: string;
 };
+type XaiVideoTask = {
+    request_id?: string;
+    status?: "pending" | "done" | "failed" | "expired";
+    video?: { url?: string } | null;
+    error?: { message?: string } | string | null;
+};
 type ApiEnvelope<T> = T | { code?: number | string; data?: T | null; msg?: string; message?: string; error?: { message?: string } };
 type RequestOptions = { signal?: AbortSignal };
 
 export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
-export type VideoGenerationTask = { id: string; provider: "openai" | "seedance" | "plugin"; model: string };
+export type VideoGenerationTask = { id: string; provider: "openai" | "seedance" | "xai" | "plugin"; model: string };
 export type VideoGenerationTaskState = { status: "pending" } | { status: "completed"; result: VideoGenerationResult } | { status: "failed"; error: string };
 
 /** Results for scripted (plugin) video models, which run their own create+poll in one shot at task creation. */
@@ -50,7 +56,7 @@ export async function requestVideoGeneration(config: AiConfig, prompt: string, r
         const state = await pollVideoGenerationTask(config, task, options);
         if (state.status === "completed") return state.result;
         if (state.status === "failed") throw new Error(state.error);
-        if (attempt === 119) throw new Error(`${task.provider === "seedance" ? "Seedance " : ""}视频生成超时，请稍后重试`);
+        if (attempt === 119) throw new Error(`${task.provider === "seedance" ? "Seedance " : task.provider === "xai" ? "xAI " : ""}视频生成超时，请稍后重试`);
         await delay(delayMs, options?.signal);
     }
     throw new Error("视频生成超时，请稍后重试");
@@ -65,6 +71,12 @@ export async function createVideoGenerationTask(config: AiConfig, prompt: string
     if (isSeedanceVideoConfig(requestConfig)) {
         return createSeedanceTask(requestConfig, selectedModel, prompt, references, videoReferences, audioReferences, options);
     }
+    if (requestConfig.apiFormat === "xai") {
+        if (videoReferences.length || audioReferences.length) {
+            throw new Error("xAI 视频接口暂不支持参考视频或参考音频，请移除这些参考资产");
+        }
+        return createXaiVideoTask(requestConfig, selectedModel, prompt, references, options);
+    }
     if (videoReferences.length || audioReferences.length) {
         throw new Error("当前视频接口不支持参考视频或参考音频，请切换到 Seedance 2.0 / 火山 Agent Plan 模型，或移除参考资产");
     }
@@ -78,7 +90,11 @@ export async function pollVideoGenerationTask(config: AiConfig, task: VideoGener
     }
     const requestConfig = resolveModelRequestConfig(config, task.model);
     assertVideoConfig(requestConfig, requestConfig.model);
-    return task.provider === "seedance" ? pollSeedanceTask(requestConfig, task, options) : pollOpenAIVideoTask(requestConfig, task, options);
+    return task.provider === "seedance"
+        ? pollSeedanceTask(requestConfig, task, options)
+        : task.provider === "xai"
+            ? pollXaiVideoTask(requestConfig, task, options)
+            : pollOpenAIVideoTask(requestConfig, task, options);
 }
 
 async function createPluginVideoTask(config: AiConfig, model: string, script: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
@@ -165,6 +181,37 @@ async function pollOpenAIVideoTask(config: AiConfig, task: VideoGenerationTask, 
         return { status: "pending" };
     } catch (error) {
         throw new Error(readAxiosError(error, "视频任务查询失败"));
+    }
+}
+
+async function createXaiVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
+    const imageUrls = await Promise.all(references.map((image) => imageToDataUrl(image)));
+    const aspectRatio = xaiAspectRatio(config.size);
+    const payload = {
+        model: modelOptionName(model),
+        prompt,
+        duration: normalizeXaiVideoSeconds(config.videoSeconds),
+        resolution: normalizeVideoResolution(config.vquality),
+        ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+        ...(imageUrls.length === 1 ? { image: { url: imageUrls[0] } } : imageUrls.length > 1 ? { reference_images: imageUrls.map((url) => ({ url })) } : {}),
+    };
+    try {
+        const created = (await axios.post<XaiVideoTask>(aiApiUrl(config, "/videos/generations"), payload, { headers: aiHeaders(config, "application/json"), signal: options?.signal })).data;
+        if (!created.request_id) throw new Error("xAI 视频接口没有返回任务 ID");
+        return { id: created.request_id, provider: "xai", model };
+    } catch (error) {
+        throw new Error(readAxiosError(error, "xAI 视频任务创建失败"));
+    }
+}
+
+async function pollXaiVideoTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
+    try {
+        const state = (await axios.get<XaiVideoTask>(aiApiUrl(config, `/videos/${task.id}`), { headers: aiHeaders(config), signal: options?.signal })).data;
+        if (state.status === "done" && state.video?.url) return { status: "completed", result: await videoResultFromUrl(state.video.url, options) };
+        if (state.status === "failed" || state.status === "expired") return { status: "failed", error: readApiErrorMessage(state.error) || `xAI 视频生成${state.status === "expired" ? "超时" : "失败"}` };
+        return { status: "pending" };
+    } catch (error) {
+        throw new Error(readAxiosError(error, "xAI 视频任务查询失败"));
     }
 }
 
@@ -297,6 +344,35 @@ function assertVideoConfig(config: AiConfig, model: string) {
 function normalizeVideoSeconds(value: string) {
     const seconds = Math.floor(Number(value) || 6);
     return String(Math.max(1, Math.min(20, seconds)));
+}
+
+function normalizeXaiVideoSeconds(value: string) {
+    return Math.max(1, Math.min(15, Math.floor(Number(value) || 6)));
+}
+
+function xaiAspectRatio(value: string) {
+    if (value === "auto") return undefined;
+    const ratioParts = value.split(":").map(Number);
+    if (ratioParts.length === 2 && ratioParts[0] && ratioParts[1]) return xaiAspectRatioFromDimensions(ratioParts[0], ratioParts[1]);
+    const normalized = normalizeVideoSize(value);
+    if (!normalized) return undefined;
+    const [width, height] = normalized.split("x").map(Number);
+    if (!width || !height) return undefined;
+    return xaiAspectRatioFromDimensions(width, height);
+}
+
+function xaiAspectRatioFromDimensions(width: number, height: number) {
+    const ratio = width / height;
+    const supported = [
+        [16, 9],
+        [9, 16],
+        [1, 1],
+        [4, 3],
+        [3, 4],
+        [3, 2],
+        [2, 3],
+    ] as const;
+    return supported.reduce((best, [x, y]) => (Math.abs(ratio - x / y) < Math.abs(ratio - best[0] / best[1]) ? [x, y] : best), supported[0]).join(":");
 }
 
 function normalizeVideoSize(value: string) {
