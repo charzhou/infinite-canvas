@@ -331,6 +331,10 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
     };
 }
 
+export function isXaiModelConfig(config: AiConfig, value = config.videoModel || config.model) {
+    return resolveModelRequestConfig(config, value).apiFormat === "xai";
+}
+
 function normalizeChannels(config: AiConfig) {
     const persistedChannels = Array.isArray(config.channels) ? config.channels : [];
     const channels = persistedChannels.map((channel, index) =>
