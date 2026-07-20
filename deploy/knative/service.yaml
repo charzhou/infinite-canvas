@@ -1,0 +1,35 @@
+# Knative Service 部署清单，等价于 docker-compose.yml 中的 app 服务。
+# 部署前提：集群已安装 Knative Serving 与网络层（Kourier/Istio 等）。
+# 使用：kubectl apply -f deploy/knative/service.yaml
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: infinite-canvas
+spec:
+  template:
+    metadata:
+      annotations:
+        # 纯静态站点，冷启动很快，允许缩容到 0 节省资源；如需常驻改为 "1"。
+        autoscaling.knative.dev/min-scale: "0"
+        autoscaling.knative.dev/max-scale: "3"
+    spec:
+      containers:
+        - image: ghcr.io/charzhou/infinite-canvas:v0.9.1
+          ports:
+            - containerPort: 3000
+          # 统计分析（可选，默认关闭）。填了谁就启用谁，可同时启用多家：
+          # - name: ANALYTICS_GA4_ID
+          #   value: G-XXXXXXXXXX
+          # - name: ANALYTICS_BAIDU_ID
+          #   value: xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000

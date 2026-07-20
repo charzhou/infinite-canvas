@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [新增] 提供 Knative Service 部署清单 `deploy/knative/service.yaml`，可将静态站点部署到 Knative 集群并缩容到 0。
 + [修复] Docker 镜像构建工作流改为推送到当前仓库所属的 GHCR 命名空间，fork 仓库可正常发布自己的镜像。
 
 ## v0.9.1 - 2026-07-20
