@@ -208,6 +208,7 @@ async function pollXaiVideoTask(config: AiConfig, task: VideoGenerationTask, opt
     try {
         const state = (await axios.get<XaiVideoTask>(aiApiUrl(config, `/videos/${task.id}`), { headers: aiHeaders(config), signal: options?.signal })).data;
         if (state.status === "done" && state.video?.url) return { status: "completed", result: await videoResultFromUrl(state.video.url, options) };
+        if (state.status === "done") return { status: "failed", error: "xAI 任务成功但没有返回视频 URL" };
         if (state.status === "failed" || state.status === "expired") return { status: "failed", error: readApiErrorMessage(state.error) || `xAI 视频生成${state.status === "expired" ? "超时" : "失败"}` };
         return { status: "pending" };
     } catch (error) {
