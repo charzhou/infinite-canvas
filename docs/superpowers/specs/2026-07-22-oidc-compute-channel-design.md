@@ -2,13 +2,14 @@
 
 ## 目标
 
-为无限画布增加一个由部署者注册、由每个浏览器分别授权的 OIDC 算力渠道。用户可在不创建无限画布账户的前提下，授权自己的上游父 API Key，并在文本、图片、视频、音频工作台和画布节点中使用对应算力与额度。
+为无限画布增加一个由部署者注册、由每个浏览器分别授权的 OIDC 算力渠道。用户可在不创建无限画布账户的前提下，授权自己的上游父 API Key，并在该客户端已获授权的文本、图片和视频工作台及画布节点中使用对应算力与额度。
 
 该渠道与用户手动填写的 API 渠道并存。画布、素材、历史记录和用户对模型能力的分类仍保存在浏览器本地。
 
 ## 非目标
 
 - 不增加无限画布用户注册、登录、用户表、跨设备同步或额度转售能力。
+- 不移除音频生成或其他现有功能。当前 OIDC scope 未包含音频模型，因此音频仅继续使用用户手填的渠道，直到部署者为 OAuth 客户端增加音频 scope。
 - 不将 OAuth `client_secret`、派生 access token 或 ID Token 暴露给浏览器 JavaScript、URL、日志或分析服务。
 - 不将 BFF 做成任意 URL 的通用转发服务，也不代理上游的 `/oauth/*`、`/api/v1/*` 或管理接口。
 - 首期不支持 Vercel Functions；GitHub Pages 继续是无 OIDC 的纯静态预览部署。
@@ -25,21 +26,30 @@
 - `OIDC_SESSION_KEY`：base64url 编码的 32 字节高熵会话加密密钥。
 - `OIDC_PROVIDER_NAME`：前端显示名称；未设置时显示为“OIDC Provider”。
 - `PUBLIC_ORIGIN`：当前部署的公开 HTTPS origin，用于生成并校验精确回调 URL。
+- `OIDC_REQUESTED_SCOPES`：空格分隔的精确 OAuth scope。必须含唯一的 `openid`，其余值必须是管理员为该 `client_id` 登记的 `llm:<platform>:<model-alias>`。
 
-只有上述 OIDC 配置完整时，BFF 才报告功能可用，前端才显示连接入口。名称、功能启用状态和连接状态可公开给前端；issuer、client ID 与所有密钥均不得返回。
+当前部署配置的 scope 为：
+
+```text
+openid llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra
+```
+
+其中 Grok 的两个 imagine image alias 初始归类为图片，两个 imagine video alias 初始归类为视频；`gpt-image-2` 初始归类为图片，`gpt-5.6-terra` 初始归类为文本。不存在音频模型。用户仍可调整已授权模型的能力分类，但不能绕过 scope 增加模型。
+
+只有上述 OIDC 配置完整且 scope 格式合法时，BFF 才报告功能可用，前端才显示连接入口。名称、功能启用状态和连接状态可公开给前端；issuer、client ID、scope 配置与所有密钥均不得返回。Discovery 文档不作为 scope 来源，因为上游不会公开客户端专属的模型 scope。
 
 ## 授权与会话
 
 1. 浏览器点击“连接 {Provider 名称}”。
 2. BFF 读取 Discovery 文档，生成 `state` 与 nonce，并把它们及回调后的相对本地返回路径加密写入 10 分钟有效的 `oidc_transaction` Cookie。
-3. BFF 将浏览器重定向到上游 `authorization_endpoint`，使用 `response_type=code` 与固定的 `openid llm` scope。
+3. BFF 将浏览器重定向到上游 `authorization_endpoint`，使用 `response_type=code` 与 `OIDC_REQUESTED_SCOPES` 的精确 scope。
 4. 上游完成登录、父 Key 选择或拒绝后，回调 BFF 的注册 URL。
 5. BFF 校验 `state`，使用 HTTP Basic 认证兑换 code，并通过 Discovery 中的 JWKS 校验 ID Token 的 `RS256`、issuer、audience 与 nonce。
-6. BFF 加密写入 30 天有效的 `oidc_session` Cookie，内容仅包含派生 access token、`sub`、issuer 和必要的连接时间元数据；随后跳转回渠道设置。
+6. BFF 对照配置 scope 验证 token 响应中的规范化 `scope`，加密写入 30 天有效的 `oidc_session` Cookie。其内容仅包含派生 access token、`sub`、issuer、已批准 scope 和必要的连接时间元数据；随后跳转回渠道设置。
 
 两个 Cookie 都使用 `HttpOnly`、`SameSite=Lax`、`Path=/`；生产环境额外使用 `Secure`。Cookie 内容采用 AES-256-GCM 加密与认证，序列化使用 base64url；BFF 必须拒绝解密失败、过期或超出浏览器 Cookie 限制的值。关闭并重新打开浏览器后会话仍有效，但达到 30 天、清除 Cookie、主动断开或上游判定 token 无效后必须重新授权。
 
-不使用 Redis、数据库或无限画布用户账户。会话只绑定当前浏览器配置，不能跨浏览器或设备迁移。
+不使用 Redis、数据库或无限画布用户账户。会话只绑定当前浏览器配置，不能跨浏览器或设备迁移。部署者变更 `OIDC_REQUESTED_SCOPES` 后，已有会话的批准 scope 不再与当前配置匹配时，BFF 必须要求重新授权。
 
 ## BFF 接口与代理边界
 
@@ -48,7 +58,8 @@
 - `GET /api/oidc/config`：返回已启用状态与 Provider 显示名称。
 - `POST /api/oidc/authorize`：建立授权事务并返回授权 URL；前端用顶层页面跳转到该 URL。
 - `GET /api/oidc/callback`：处理授权回调，不向前端暴露 code 或 token。
-- `GET /api/oidc/session`：返回当前连接状态、Provider 名称和可用于界面显示的元数据。
+- `GET /api/oidc/session`：返回当前连接状态、Provider 名称、批准 scope 及可用于界面显示的元数据。
+- `GET /api/oidc/models`：返回当前会话允许的模型、平台和调用格式；模型清单以批准 scope 为上限，并可结合上游受限模型列表刷新。
 - `DELETE /api/oidc/session`：以 BFF 客户端凭据调用上游 revocation endpoint；无论撤销结果如何均清除本地 Cookie。
 - `ALL /api/oidc/proxy/*`：按白名单转发模型调用。
 
@@ -60,7 +71,7 @@
 
 ## 前端渠道模型与体验
 
-渠道模型增加受管理认证类型，例如 `authMode: "manual" | "oidc"`。手填渠道继续保留 Base URL 与 API Key；OIDC 渠道不保存或展示任何 API Key、issuer、client ID 或 secret。
+渠道模型增加受管理认证类型，例如 `authMode: "manual" | "oidc"`；`ChannelModel` 增加可选的模型级 `apiFormat`。手填渠道继续使用渠道级协议、Base URL 与 API Key；OIDC 渠道不保存或展示任何 API Key、issuer、client ID 或 secret。
 
 渠道设置新增由 BFF 配置驱动的受管理渠道卡片：
 
@@ -69,9 +80,9 @@
 - 已连接：显示“{Provider 名称}”、模型数量、“同步模型”与“断开”。
 - 失效：显示需重新连接的状态，手填渠道不受影响。
 
-受管理渠道默认名称直接为 `{Provider 名称}`，不附加协议名称。授权后，前端经 BFF 拉取上游 `/v1/models` 并创建或更新该渠道的模型列表。模型继续使用现有编辑器，用户可修改文本、图片、视频和音频能力分类；凭据相关字段不可编辑。
+受管理渠道默认名称直接为 `{Provider 名称}`，不附加协议名称。授权后，前端经 BFF 的模型接口创建或更新该渠道模型列表；该接口只返回已批准 scope 对应的 alias。`llm:openai:*` 映射为模型级 OpenAI 格式，`llm:grok:*` 映射为模型级 xAI 格式，调用时优先采用模型级格式而非渠道默认格式。模型继续使用现有编辑器，用户可修改已授权模型的能力分类；OIDC 凭据、平台与模型列表不可编辑。当前列表不产生音频选项，音频工作台继续从手填渠道选择模型。
 
-所有文本、图片、视频、音频工作台和画布生成节点在选择该渠道时，使用 BFF 相对代理地址而不是直连上游。前端请求层必须识别 `authMode: "oidc"`，不要求或伪造 `apiKey`，并保持手填渠道的原有请求行为不变。
+所有文本、图片、视频工作台和画布中的对应生成节点在选择该渠道时，使用 BFF 相对代理地址而不是直连上游。前端请求层必须识别 `authMode: "oidc"`，不要求或伪造 `apiKey`，并保持手填渠道与音频工作台的原有请求行为不变。
 
 ## 错误处理
 
@@ -85,6 +96,6 @@
 
 服务端测试覆盖 Discovery、授权重定向、state/nonce、ID Token 验证、Cookie 加密与过期、token 交换、撤销、同源校验、代理鉴权重写、路径白名单、SSE、multipart 图片请求和二进制视频响应。
 
-前端测试覆盖 Provider 名称显示、连接状态、自动模型同步、模型能力编辑、断开与失效重连，以及手填渠道回归。集成验收覆盖文本、图片、视频、音频工作台和画布内的对应生成节点。
+前端测试覆盖 Provider 名称显示、精确 scope 模型同步、模型级协议解析、模型能力编辑、断开与失效重连，以及手填渠道和音频功能回归。集成验收覆盖当前获授权的文本、图片、视频工作台和画布内对应生成节点，并确认音频仍可通过手填渠道工作。
 
 部署验收覆盖 Docker、Render、Knative 的同域回调、页面刷新路由回退与环境变量缺失场景。GitHub Pages 验证 OIDC 入口隐藏且手填渠道保持可用。
