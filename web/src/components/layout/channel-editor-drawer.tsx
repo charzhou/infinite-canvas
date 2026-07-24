@@ -30,6 +30,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
         if (open && channel) setDraft(channel);
     }, [open, channel]);
 
+    if (channel?.authMode === "oidc") return null;
     if (!draft) return null;
 
     const patch = (value: Partial<ModelChannel>) => setDraft((current) => (current ? { ...current, ...value } : current));
