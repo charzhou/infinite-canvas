@@ -56,21 +56,34 @@ test("proxy injects the cookie-derived bearer token and drops browser credential
     assert.equal(upstreamHeaders?.get("x-goog-api-key"), null);
 });
 
-test("proxy allows the xAI video generation route", async () => {
-    let upstreamPath = "";
+test("proxy allows every route used by the approved OIDC models", async () => {
+    const upstreamTargets: string[] = [];
     const app = createApp(config, {
         proxy: {
             fetch: async (url) => {
-                upstreamPath = new URL(url).pathname;
-                return new Response(JSON.stringify({ request_id: "video-request" }), { status: 200, headers: { "Content-Type": "application/json" } });
+                const target = new URL(url);
+                upstreamTargets.push(`${target.pathname}${target.search}`);
+                return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
             },
         },
     });
 
-    const response = await request(app).post("/api/oidc/proxy/v1/videos/generations").set("Origin", "https://canvas.example").set("Cookie", authenticatedCookie()).send({ model: "grok-imagine-video" });
+    const calls = [
+        { method: "POST", path: "/v1/images/generations" },
+        { method: "POST", path: "/v1/images/edits" },
+        { method: "POST", path: "/v1/responses" },
+        { method: "POST", path: "/v1/videos/generations" },
+        { method: "GET", path: "/v1/videos/video-request" },
+    ] as const;
 
-    assert.equal(response.status, 200);
-    assert.equal(upstreamPath, "/v1/videos/generations");
+    for (const call of calls) {
+        const response = call.method === "POST"
+            ? await request(app).post(`/api/oidc/proxy${call.path}`).set("Origin", "https://canvas.example").set("Cookie", authenticatedCookie()).send({ model: "test" })
+            : await request(app).get(`/api/oidc/proxy${call.path}`).set("Cookie", authenticatedCookie());
+        assert.equal(response.status, 200, `${call.method} ${call.path}`);
+    }
+
+    assert.deepEqual(upstreamTargets, calls.map((call) => call.path));
 });
 
 test("proxy rejects management and absolute targets", async () => {
