@@ -51,6 +51,8 @@ export type AiConfig = {
     canvasImageCount: string;
 };
 
+export type ModelRequestConfig = AiConfig & Pick<ModelChannel, "authMode">;
+
 export type WebdavSyncConfig = {
     url: string;
     username: string;
@@ -325,7 +327,7 @@ export function resolveModelChannel(config: AiConfig, value: string) {
     return matched || config.channels[0] || createModelChannel({ id: "default", name: "默认渠道", baseUrl: config.baseUrl, apiKey: config.apiKey, apiFormat: config.apiFormat, models: config.models.map(modelOptionName).map((name) => ({ name, capability: guessCapability(name) })) });
 }
 
-export function resolveModelRequestConfig(config: AiConfig, value: string) {
+export function resolveModelRequestConfig(config: AiConfig, value: string): ModelRequestConfig {
     const channel = resolveModelChannel(config, value);
     const model = findChannelModel(config, value)?.model;
     return {
@@ -334,6 +336,7 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
         baseUrl: channel.baseUrl,
         apiKey: channel.apiKey,
         apiFormat: model?.apiFormat || channel.apiFormat,
+        authMode: channel.authMode,
     };
 }
 
