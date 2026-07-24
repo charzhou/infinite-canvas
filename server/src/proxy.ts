@@ -10,7 +10,7 @@ export const proxyPrefix = "/api/oidc/proxy";
 
 const allowedRoutes = [
     ["GET", /^\/v1\/models$/],
-    ["POST", /^\/v1\/(chat\/completions|responses|images\/(generations|edits)|videos|audio\/speech)$/],
+    ["POST", /^\/v1\/(chat\/completions|responses|images\/(generations|edits)|videos(?:\/generations)?|audio\/speech)$/],
     ["GET", /^\/v1\/videos\/[^/]+$/],
     ["GET", /^\/(v1beta|antigravity\/v1beta)\/models(?:\/[^/]+)?$/],
     ["POST", /^\/(v1beta|antigravity\/v1beta)\/models\/[^/:]+:(generateContent|streamGenerateContent|predictLongRunning)$/],

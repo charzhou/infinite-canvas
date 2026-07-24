@@ -56,6 +56,23 @@ test("proxy injects the cookie-derived bearer token and drops browser credential
     assert.equal(upstreamHeaders?.get("x-goog-api-key"), null);
 });
 
+test("proxy allows the xAI video generation route", async () => {
+    let upstreamPath = "";
+    const app = createApp(config, {
+        proxy: {
+            fetch: async (url) => {
+                upstreamPath = new URL(url).pathname;
+                return new Response(JSON.stringify({ request_id: "video-request" }), { status: 200, headers: { "Content-Type": "application/json" } });
+            },
+        },
+    });
+
+    const response = await request(app).post("/api/oidc/proxy/v1/videos/generations").set("Origin", "https://canvas.example").set("Cookie", authenticatedCookie()).send({ model: "grok-imagine-video" });
+
+    assert.equal(response.status, 200);
+    assert.equal(upstreamPath, "/v1/videos/generations");
+});
+
 test("proxy rejects management and absolute targets", async () => {
     const app = createApp(config, { proxy: { fetch: async () => new Response(null, { status: 200 }) } });
     const cookie = authenticatedCookie();
