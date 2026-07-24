@@ -74,7 +74,7 @@ export function loadOidcConfig(env = process.env): OidcConfig | null {
         clientId: env.OIDC_CLIENT_ID!.trim(),
         clientSecret: env.OIDC_CLIENT_SECRET!,
         sessionKey,
-        providerName: env.OIDC_PROVIDER_NAME?.trim() || "OIDC Provider",
+        providerName: env.OIDC_PROVIDER_NAME?.trim() || "Provider",
         publicOrigin: normalizedOrigin(env.PUBLIC_ORIGIN!, "PUBLIC_ORIGIN"),
         scopes,
         models: scopeModels(scopes),
