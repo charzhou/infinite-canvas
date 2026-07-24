@@ -74,6 +74,7 @@ test("proxy allows every route used by the approved OIDC models", async () => {
         { method: "POST", path: "/v1/responses" },
         { method: "POST", path: "/v1/videos/generations" },
         { method: "GET", path: "/v1/videos/video-request" },
+        { method: "GET", path: "/v1/videos/video-request/content" },
     ] as const;
 
     for (const call of calls) {
