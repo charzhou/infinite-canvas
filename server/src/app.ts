@@ -6,6 +6,7 @@ import express, { type Express, type Request, type Response } from "express";
 import { openCookie, sealCookie, sessionCookie, transactionCookie } from "./cookies.js";
 import { parseScopes, type OidcConfig } from "./config.js";
 import { discoveryFor, exchangeCode, revokeAccessToken, verifyIdToken, type Discovery, type TokenResponse } from "./oidc.js";
+import { proxyGatewayRequest, proxyPrefix, type ProxyDependencies } from "./proxy.js";
 
 export type OidcTransaction = {
     state: string;
@@ -30,6 +31,7 @@ type OidcClient = {
 
 export type OidcAppDependencies = {
     oidc?: Partial<OidcClient>;
+    proxy?: ProxyDependencies;
 };
 
 const defaultOidcClient: OidcClient = {
@@ -70,7 +72,7 @@ function transactionFor(request: Request, config: OidcConfig) {
     return transaction;
 }
 
-function sessionFor(request: Request, config: OidcConfig) {
+export function sessionFor(request: Request, config: OidcConfig) {
     const session = openCookie<OidcSessionPayload>(cookieValue(request, sessionCookie.name), config.sessionKey);
     if (!session || typeof session.accessToken !== "string" || typeof session.subject !== "string" || session.issuer !== config.issuer.origin || !Array.isArray(session.scopes) || !session.scopes.every((scope) => typeof scope === "string")) return null;
     return session;
@@ -80,7 +82,7 @@ function clearSession(response: Response, config: OidcConfig) {
     response.clearCookie(sessionCookie.name, sessionCookie.options(config));
 }
 
-function invalidSession(response: Response, config: OidcConfig) {
+export function invalidSession(response: Response, config: OidcConfig) {
     clearSession(response, config);
     return response.status(401).json({ code: "oidc_session_invalid" });
 }
@@ -102,6 +104,12 @@ export function createApp(config: OidcConfig | null, dependencies: OidcAppDepend
     const app = express();
     const oidc = { ...defaultOidcClient, ...dependencies.oidc };
 
+    app.use(proxyPrefix, (request, response, next) => {
+        if (!config) return response.status(404).json({ code: "oidc_disabled" });
+        const session = sessionFor(request, config);
+        if (!session || !sameScopes(session.scopes, config.scopes)) return invalidSession(response, config);
+        void proxyGatewayRequest(config, request, response, session, dependencies.proxy).catch(next);
+    });
     app.use(express.json({ limit: "16kb" }));
     app.get("/api/oidc/config", (_request, response) => {
         response.json({ enabled: Boolean(config), providerName: config?.providerName || "" });
