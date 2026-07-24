@@ -9,12 +9,24 @@ COPY CHANGELOG.md /app/CHANGELOG.md
 COPY web ./
 RUN bun run build
 
-# 运行镜像：只启动静态前端，AI 请求由浏览器前台直连用户自己的接口。
-FROM nginx:1.27-alpine
+# 编译同源 OIDC BFF。
+FROM node:22-alpine AS server-build
 
-COPY --from=web-build /app/web/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY web/docker-entrypoint.sh /docker-entrypoint.d/40-runtime-config.sh
-RUN chmod +x /docker-entrypoint.d/40-runtime-config.sh
+WORKDIR /app/server
+COPY server/package.json ./
+RUN npm install
+COPY server ./
+RUN npm run build && npm prune --omit=dev
+
+# 运行镜像：由 BFF 同时托管 SPA 和受限 OIDC 网关代理。
+FROM node:22-alpine
+
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=server-build /app/server/package.json ./server/package.json
+COPY --from=server-build /app/server/node_modules ./server/node_modules
+COPY --from=server-build /app/server/dist ./server/dist
+COPY --from=web-build /app/web/dist ./web/dist
 
 EXPOSE 3000
+CMD ["node", "server/dist/index.js"]
