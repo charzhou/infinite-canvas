@@ -69,6 +69,13 @@ function copyResponseHeaders(upstream: globalThis.Response, response: Response) 
     }
 }
 
+function proxyErrorCode(error: unknown) {
+    const cause = error instanceof Error ? error.cause : undefined;
+    if (!cause || typeof cause !== "object" || !("code" in cause)) return undefined;
+    const code = (cause as { code?: unknown }).code;
+    return typeof code === "string" ? code : undefined;
+}
+
 export async function proxyGatewayRequest(config: OidcConfig, request: Request, response: Response, session: OidcSessionPayload, dependencies: ProxyDependencies = {}) {
     const target = targetFor(request);
     if (!target || !sameOriginWrite(request, config)) return response.status(404).json({ code: "oidc_proxy_not_found" });
@@ -81,6 +88,7 @@ export async function proxyGatewayRequest(config: OidcConfig, request: Request, 
             headers: copiedRequestHeaders(request, session.accessToken),
             body: hasBody ? (request as unknown as ReadableStream) : undefined,
             duplex: "half",
+            signal: AbortSignal.timeout(config.proxyTimeoutMs),
         } as RequestInit & { duplex: "half" };
         const upstream = await (dependencies.fetch || fetch)(new URL(target, config.issuer), init);
         const sessionInvalid = await invalidToken(upstream);
@@ -92,7 +100,8 @@ export async function proxyGatewayRequest(config: OidcConfig, request: Request, 
         response.status(upstream.status);
         if (!upstream.body) return response.end();
         Readable.fromWeb(upstream.body as import("node:stream/web").ReadableStream).on("error", () => response.destroy()).pipe(response);
-    } catch {
+    } catch (error) {
+        console.error("OIDC gateway request failed", { method: request.method, path: target.split("?", 1)[0], error: error instanceof Error ? error.message : String(error), code: proxyErrorCode(error) });
         if (!response.headersSent) return response.status(502).json({ code: "oidc_gateway_unavailable" });
         response.destroy();
     }

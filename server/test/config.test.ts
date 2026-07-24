@@ -39,6 +39,7 @@ test("loads the approved exact scopes into protocol and capability metadata", ()
     );
     assert.equal(config?.providerName, "My Compute");
     assert.equal(config?.issuer.toString(), "https://issuer.example/");
+    assert.equal(config?.proxyTimeoutMs, 600_000);
 });
 
 test("rejects bare, wildcard, duplicate openid, and unsupported model scopes", () => {

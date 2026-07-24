@@ -34,10 +34,12 @@ function authenticatedCookie() {
 
 test("proxy injects the cookie-derived bearer token and drops browser credentials", async () => {
     let upstreamHeaders: Headers | undefined;
+    let upstreamSignal: AbortSignal | null | undefined;
     const app = createApp(config, {
         proxy: {
             fetch: async (_url, init) => {
                 upstreamHeaders = new Headers(init?.headers);
+                upstreamSignal = init?.signal;
                 return new Response(JSON.stringify({ created: true }), { status: 200, headers: { "Content-Type": "application/json" } });
             },
         },
@@ -54,6 +56,7 @@ test("proxy injects the cookie-derived bearer token and drops browser credential
     assert.equal(response.status, 200);
     assert.equal(upstreamHeaders?.get("authorization"), "Bearer derived-token");
     assert.equal(upstreamHeaders?.get("x-goog-api-key"), null);
+    assert.ok(upstreamSignal instanceof AbortSignal);
 });
 
 test("proxy allows every route used by the approved OIDC models", async () => {

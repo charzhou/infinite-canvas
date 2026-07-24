@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [优化] OIDC 受限代理新增统一的 10 分钟上游请求超时配置。
 + [修复] xAI 视频完成后改经内容端点下载，避免依赖短时有效的结果 URL。
 + [优化] 本地 OIDC BFF 开发环境可通过 Git 忽略的 `server/.env.local` 固定会话密钥，重启服务无需重复授权。
 + [修复] OIDC BFF 放行 Grok 视频生成所需的 `/v1/videos/generations` 受限代理路径。

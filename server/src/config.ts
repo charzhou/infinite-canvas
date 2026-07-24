@@ -13,6 +13,7 @@ export type OidcConfig = {
     sessionKey: Uint8Array;
     providerName: string;
     publicOrigin: URL;
+    proxyTimeoutMs: number;
     scopes: string[];
     models: OidcModel[];
 };
@@ -27,6 +28,7 @@ const approvedModels: OidcModel[] = [
 ];
 
 const approvedScopes = new Set(["openid", ...approvedModels.map((model) => model.scope)]);
+const defaultProxyTimeoutMs = 600_000;
 
 function normalizedOrigin(value: string, name: string) {
     let url: URL;
@@ -39,6 +41,13 @@ function normalizedOrigin(value: string, name: string) {
         throw new Error(`${name} 必须是有效的 HTTP(S) Origin`);
     }
     return new URL(url.origin);
+}
+
+function proxyTimeout(value: string | undefined) {
+    if (!value?.trim()) return defaultProxyTimeoutMs;
+    const timeout = Number(value);
+    if (!Number.isSafeInteger(timeout) || timeout <= 0) throw new Error("OIDC_PROXY_TIMEOUT_MS 必须是正整数毫秒数");
+    return timeout;
 }
 
 export function parseScopes(value: string) {
@@ -76,6 +85,7 @@ export function loadOidcConfig(env = process.env): OidcConfig | null {
         sessionKey,
         providerName: env.OIDC_PROVIDER_NAME?.trim() || "Provider",
         publicOrigin: normalizedOrigin(env.PUBLIC_ORIGIN!, "PUBLIC_ORIGIN"),
+        proxyTimeoutMs: proxyTimeout(env.OIDC_PROXY_TIMEOUT_MS),
         scopes,
         models: scopeModels(scopes),
     };

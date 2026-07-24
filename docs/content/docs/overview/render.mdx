@@ -5,7 +5,7 @@ description: 使用 Render 部署无限画布
 
 # Render 部署
 
-Render 使用仓库根目录的 `render.yaml` 构建 Docker 镜像。OIDC 相关变量在 Render 控制台中以 Secret 填写：`OIDC_ISSUER`、`OIDC_CLIENT_ID`、`OIDC_CLIENT_SECRET`、`OIDC_SESSION_KEY`、`OIDC_PROVIDER_NAME`、`OIDC_REQUESTED_SCOPES` 和 `PUBLIC_ORIGIN`。
+Render 使用仓库根目录的 `render.yaml` 构建 Docker 镜像。OIDC 相关变量在 Render 控制台中以 Secret 填写：`OIDC_ISSUER`、`OIDC_CLIENT_ID`、`OIDC_CLIENT_SECRET`、`OIDC_SESSION_KEY`、`OIDC_PROVIDER_NAME`、`OIDC_REQUESTED_SCOPES` 和 `PUBLIC_ORIGIN`；`OIDC_PROXY_TIMEOUT_MS` 固定为 `600000`（10 分钟）。
 
 `PUBLIC_ORIGIN` 使用 Render 分配或绑定的 HTTPS 域名，并在 Provider 中注册精确回调 `{PUBLIC_ORIGIN}/api/oidc/callback`。当前 scope 必须为：
 
