@@ -161,8 +161,9 @@ export function modelMatchesCapability(config: AiConfig, value: string, capabili
 }
 
 export function selectableModelsByCapability(config: AiConfig, capability?: ModelCapability) {
-    if (!capability) return config.models;
-    return config.channels.flatMap((channel) => channel.models.filter((model) => model.capability === capability).map((model) => encodeChannelModel(channel.id, model.name)));
+    return config.channels
+        .filter((channel) => channel.baseUrl.trim() && (channel.authMode === "oidc" || channel.apiKey.trim()))
+        .flatMap((channel) => channel.models.filter((model) => !capability || model.capability === capability).map((model) => encodeChannelModel(channel.id, model.name)));
 }
 
 /** The user script (if any) attached to a model; empty string means use the system default call. */
