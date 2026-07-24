@@ -5,6 +5,16 @@ description: 使用 Render 部署无限画布
 
 # Render 部署
 
+Render 使用仓库根目录的 `render.yaml` 构建 Docker 镜像。OIDC 相关变量在 Render 控制台中以 Secret 填写：`OIDC_ISSUER`、`OIDC_CLIENT_ID`、`OIDC_CLIENT_SECRET`、`OIDC_SESSION_KEY`、`OIDC_PROVIDER_NAME`、`OIDC_REQUESTED_SCOPES` 和 `PUBLIC_ORIGIN`。
+
+`PUBLIC_ORIGIN` 使用 Render 分配或绑定的 HTTPS 域名，并在 Provider 中注册精确回调 `{PUBLIC_ORIGIN}/api/oidc/callback`。当前 scope 必须为：
+
+```text
+openid llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra
+```
+
+修改 scope 会让旧浏览器会话失效并要求重新连接。没有这些变量时，Render 部署仍可作为手动 API Key 渠道使用。
+
 点击下面链接即可部署到 Render：
 
 [部署到 Render](https://render.com/deploy?repo=https://github.com/basketikun/infinite-canvas)
