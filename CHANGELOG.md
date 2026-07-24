@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [优化] 本地 OIDC BFF 开发环境可通过 Git 忽略的 `server/.env.local` 固定会话密钥，重启服务无需重复授权。
 + [修复] OIDC BFF 放行 Grok 视频生成所需的 `/v1/videos/generations` 受限代理路径。
 + [修复] OIDC 托管的 Grok 视频模型不再错误要求浏览器配置 API Key。
 + [新增] 增加浏览器作用域、Provider 名称可配置的 OIDC 算力渠道，通过同源 BFF 安全使用受批准模型。

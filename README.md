@@ -58,6 +58,14 @@ bun install
 bun run dev
 ```
 
+需要本地测试 OIDC 算力渠道时，另开一个终端启动同源 BFF。将 `server/.env.example` 复制为 Git 忽略的 `server/.env.local` 并填写 Provider 配置；`OIDC_SESSION_KEY` 保持不变即可在 BFF 重启后继续使用浏览器会话。
+
+```bash
+cd server
+npm install
+npm run dev
+```
+
 ### Docker 运行
 
 ```bash

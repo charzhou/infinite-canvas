@@ -9,6 +9,12 @@ import { loadOidcConfig } from "./config.js";
 
 const webDist = resolve(dirname(fileURLToPath(import.meta.url)), "../../web/dist");
 const indexFile = resolve(webDist, "index.html");
+
+if (process.env.NODE_ENV === "development") {
+    const envFile = resolve(dirname(fileURLToPath(import.meta.url)), "../.env.local");
+    if (existsSync(envFile)) process.loadEnvFile(envFile);
+}
+
 const app = createApp(loadOidcConfig());
 
 app.use(express.static(webDist));

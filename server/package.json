@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "PORT=3001 tsx watch src/index.ts",
+    "dev": "NODE_ENV=development PORT=3001 tsx watch src/index.ts",
     "test": "tsx --test test/**/*.test.ts"
   },
   "dependencies": {
