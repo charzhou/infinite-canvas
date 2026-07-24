@@ -1,0 +1,23 @@
+{
+  "name": "infinite-canvas-bff",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "test": "tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "cookie": "^1.0.2",
+    "express": "^5.1.0",
+    "jose": "^6.0.10"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.15.0",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.1.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}
