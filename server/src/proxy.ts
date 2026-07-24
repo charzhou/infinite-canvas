@@ -1,4 +1,5 @@
 import { Readable } from "node:stream";
+import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
 
 import type { Request, Response } from "express";
 
@@ -19,10 +20,21 @@ const allowedRoutes = [
 
 const requestHeaders = ["accept", "content-type", "range", "x-request-id", "x-correlation-id", "traceparent", "tracestate"];
 const responseHeaders = ["accept-ranges", "cache-control", "content-disposition", "content-range", "content-type", "etag", "last-modified", "location", "retry-after", "x-request-id", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset"];
+const proxyDispatchers = new Map<number, Dispatcher>();
 
 export type ProxyDependencies = {
     fetch?: typeof fetch;
+    dispatcherFor?: (timeoutMs: number) => Dispatcher;
 };
+
+function dispatcherFor(timeoutMs: number) {
+    let dispatcher = proxyDispatchers.get(timeoutMs);
+    if (!dispatcher) {
+        dispatcher = new Agent({ headersTimeout: timeoutMs, bodyTimeout: timeoutMs });
+        proxyDispatchers.set(timeoutMs, dispatcher);
+    }
+    return dispatcher;
+}
 
 function targetFor(request: Request) {
     const raw = request.originalUrl.slice(proxyPrefix.length);
@@ -89,8 +101,12 @@ export async function proxyGatewayRequest(config: OidcConfig, request: Request, 
             body: hasBody ? (request as unknown as ReadableStream) : undefined,
             duplex: "half",
             signal: AbortSignal.timeout(config.proxyTimeoutMs),
-        } as RequestInit & { duplex: "half" };
-        const upstream = await (dependencies.fetch || fetch)(new URL(target, config.issuer), init);
+            dispatcher: (dependencies.dispatcherFor || dispatcherFor)(config.proxyTimeoutMs),
+        } as RequestInit & { duplex: "half"; dispatcher: Dispatcher };
+        const url = new URL(target, config.issuer);
+        const upstream: globalThis.Response = dependencies.fetch
+            ? await dependencies.fetch(url, init)
+            : await undiciFetch(url, init as Parameters<typeof undiciFetch>[1]) as unknown as globalThis.Response;
         const sessionInvalid = await invalidToken(upstream);
         if (sessionInvalid) {
             response.clearCookie(sessionCookie.name, sessionCookie.options(config));
