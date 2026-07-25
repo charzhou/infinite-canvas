@@ -1,4 +1,4 @@
-# Knative Service 部署清单，等价于 docker-compose.yml 中的 app 服务。
+# Knative Service 部署清单。镜像内包含 Vite SPA 和同源 OIDC BFF。
 # 部署前提：集群已安装 Knative Serving 与网络层（Kourier/Istio 等）。
 # 使用：kubectl apply -f deploy/knative/service.yaml
 apiVersion: serving.knative.dev/v1
@@ -9,12 +9,14 @@ spec:
   template:
     metadata:
       annotations:
-        # 纯静态站点，冷启动很快，允许缩容到 0 节省资源；如需常驻改为 "1"。
+        # BFF 无状态，允许缩容到 0；如需常驻改为 "1"。
         autoscaling.knative.dev/min-scale: "0"
         autoscaling.knative.dev/max-scale: "3"
     spec:
+      # 与 OIDC BFF 的 OIDC_PROXY_TIMEOUT_MS=600000 保持一致。
+      timeoutSeconds: 600
       containers:
-        - image: ghcr.io/charzhou/infinite-canvas:v0.9.1
+        - image: ghcr.io/charzhou/infinite-canvas:v0.9.2
           ports:
             - containerPort: 3000
           env:
@@ -32,6 +34,8 @@ spec:
               valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_REQUESTED_SCOPES, optional: true } }
             - name: PUBLIC_ORIGIN
               valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: PUBLIC_ORIGIN, optional: true } }
+            - name: OIDC_PROXY_TIMEOUT_MS
+              value: "600000"
           # 统计分析（可选，默认关闭）。填了谁就启用谁，可同时启用多家：
           # - name: ANALYTICS_GA4_ID
           #   value: G-XXXXXXXXXX

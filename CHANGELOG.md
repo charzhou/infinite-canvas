@@ -2,6 +2,8 @@
 
 ## Unreleased
 
++ [调整] Knative Serving 清单改用内置 OIDC BFF 的 v0.9.2 镜像，补充 10 分钟请求超时、OIDC Secret 模板和部署说明。
+
 ## v0.9.2 - 2026-07-25
 
 + [修复] OIDC xAI 视频识别 Provider 的 `completed` 完成态并经内容端点下载结果，不再持续轮询。
