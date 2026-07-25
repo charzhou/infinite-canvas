@@ -2,6 +2,8 @@
 
 ## Unreleased
 
++ [新增] OIDC 算力渠道部署补充可选 `OIDC_GATEWAY_BASE_URL`，并统一更新 Knative/Render/Docker 的 CDN 加速说明与当前镜像版本。
+
 ## v0.10.1 - 2026-07-25
 
 + [调整] Knative Serving 清单改用内置 OIDC BFF 的 v0.9.2 镜像，补充 10 分钟请求超时、OIDC Secret 模板和部署说明。

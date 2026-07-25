@@ -10,6 +10,8 @@ services:
         value: 3000
       - key: OIDC_ISSUER
         sync: false
+      - key: OIDC_GATEWAY_BASE_URL
+        sync: false
       - key: OIDC_CLIENT_ID
         sync: false
       - key: OIDC_CLIENT_SECRET

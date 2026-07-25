@@ -16,12 +16,14 @@ spec:
       # 与 OIDC BFF 的 OIDC_PROXY_TIMEOUT_MS=600000 保持一致。
       timeoutSeconds: 600
       containers:
-        - image: ghcr.io/charzhou/infinite-canvas:v0.9.2
+        - image: ghcr.io/charzhou/infinite-canvas:v0.10.1
           ports:
             - containerPort: 3000
           env:
             - name: OIDC_ISSUER
               valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_ISSUER, optional: true } }
+            - name: OIDC_GATEWAY_BASE_URL
+              valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_GATEWAY_BASE_URL, optional: true } }
             - name: OIDC_CLIENT_ID
               valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_CLIENT_ID, optional: true } }
             - name: OIDC_CLIENT_SECRET
