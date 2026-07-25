@@ -117,3 +117,42 @@ test("proxy clears a session only for an OAuth invalid-token response", async ()
     assert.equal(response.headers["x-oidc-session-invalid"], "1");
     assert.match(response.headers["set-cookie"].join(";"), /oidc_session=;/);
 });
+
+test("proxy retries a reset video status request once", async () => {
+    let attempts = 0;
+    const app = createApp(config, {
+        proxy: {
+            fetch: async () => {
+                attempts++;
+                if (attempts === 1) throw new Error("fetch failed", { cause: { code: "ECONNRESET" } });
+                return new Response(JSON.stringify({ status: "processing" }), { status: 200, headers: { "Content-Type": "application/json" } });
+            },
+        },
+    });
+
+    const response = await request(app).get("/api/oidc/proxy/v1/videos/video-request").set("Cookie", authenticatedCookie());
+
+    assert.equal(response.status, 200);
+    assert.equal(attempts, 2);
+});
+
+test("proxy does not retry a reset video generation request", async () => {
+    let attempts = 0;
+    const app = createApp(config, {
+        proxy: {
+            fetch: async () => {
+                attempts++;
+                throw new Error("fetch failed", { cause: { code: "ECONNRESET" } });
+            },
+        },
+    });
+
+    const response = await request(app)
+        .post("/api/oidc/proxy/v1/videos/generations")
+        .set("Origin", "https://canvas.example")
+        .set("Cookie", authenticatedCookie())
+        .send({ model: "grok-imagine-video", prompt: "test" });
+
+    assert.equal(response.status, 502);
+    assert.equal(attempts, 1);
+});

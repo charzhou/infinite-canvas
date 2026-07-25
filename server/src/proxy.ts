@@ -88,6 +88,10 @@ function proxyErrorCode(error: unknown) {
     return typeof code === "string" ? code : undefined;
 }
 
+function retryableVideoStatusRequest(request: Request, target: string, error: unknown) {
+    return request.method === "GET" && /^\/v1\/videos\/[^/]+$/.test(target.split("?", 1)[0]) && proxyErrorCode(error) === "ECONNRESET";
+}
+
 export async function proxyGatewayRequest(config: OidcConfig, request: Request, response: Response, session: OidcSessionPayload, dependencies: ProxyDependencies = {}) {
     const target = targetFor(request);
     if (!target || !sameOriginWrite(request, config)) return response.status(404).json({ code: "oidc_proxy_not_found" });
@@ -104,9 +108,16 @@ export async function proxyGatewayRequest(config: OidcConfig, request: Request, 
             dispatcher: (dependencies.dispatcherFor || dispatcherFor)(config.proxyTimeoutMs),
         } as RequestInit & { duplex: "half"; dispatcher: Dispatcher };
         const url = new URL(target, config.issuer);
-        const upstream: globalThis.Response = dependencies.fetch
-            ? await dependencies.fetch(url, init)
-            : await undiciFetch(url, init as Parameters<typeof undiciFetch>[1]) as unknown as globalThis.Response;
+        const gatewayFetch = () => dependencies.fetch
+            ? dependencies.fetch(url, init)
+            : undiciFetch(url, init as Parameters<typeof undiciFetch>[1]) as unknown as Promise<globalThis.Response>;
+        let upstream: globalThis.Response;
+        try {
+            upstream = await gatewayFetch();
+        } catch (error) {
+            if (!retryableVideoStatusRequest(request, target, error)) throw error;
+            upstream = await gatewayFetch();
+        }
         const sessionInvalid = await invalidToken(upstream);
         if (sessionInvalid) {
             response.clearCookie(sessionCookie.name, sessionCookie.options(config));
