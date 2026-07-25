@@ -8,6 +8,7 @@ export type OidcModel = {
 
 export type OidcConfig = {
     issuer: URL;
+    gatewayBaseUrl: URL;
     clientId: string;
     clientSecret: string;
     sessionKey: Uint8Array;
@@ -78,8 +79,13 @@ export function loadOidcConfig(env = process.env): OidcConfig | null {
     if (sessionKey.byteLength !== 32) throw new Error("OIDC_SESSION_KEY 必须是 base64url 编码的 32 字节密钥");
 
     const scopes = parseScopes(env.OIDC_REQUESTED_SCOPES!);
+    const issuer = normalizedOrigin(env.OIDC_ISSUER!, "OIDC_ISSUER");
+    const gatewayBaseUrl = env.OIDC_GATEWAY_BASE_URL?.trim()
+        ? normalizedOrigin(env.OIDC_GATEWAY_BASE_URL, "OIDC_GATEWAY_BASE_URL")
+        : issuer;
     return {
-        issuer: normalizedOrigin(env.OIDC_ISSUER!, "OIDC_ISSUER"),
+        issuer,
+        gatewayBaseUrl,
         clientId: env.OIDC_CLIENT_ID!.trim(),
         clientSecret: env.OIDC_CLIENT_SECRET!,
         sessionKey,

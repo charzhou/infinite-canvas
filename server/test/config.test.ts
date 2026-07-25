@@ -39,7 +39,24 @@ test("loads the approved exact scopes into protocol and capability metadata", ()
     );
     assert.equal(config?.providerName, "My Compute");
     assert.equal(config?.issuer.toString(), "https://issuer.example/");
+    assert.equal(config?.gatewayBaseUrl?.toString(), "https://issuer.example/");
     assert.equal(config?.proxyTimeoutMs, 600_000);
+});
+
+test("loads OIDC gateway base url when configured", () => {
+    const config = loadOidcConfig({ ...testEnv, OIDC_GATEWAY_BASE_URL: "https://cdn.example/" });
+
+    assert.equal(config?.gatewayBaseUrl.toString(), "https://cdn.example/");
+});
+
+test("falls back to issuer for missing OIDC gateway base url", () => {
+    const config = loadOidcConfig(testEnv);
+
+    assert.equal(config?.gatewayBaseUrl.toString(), "https://issuer.example/");
+});
+
+test("rejects gateway base url paths", () => {
+    assert.throws(() => loadOidcConfig({ ...testEnv, OIDC_GATEWAY_BASE_URL: "https://cdn.example/v1" }));
 });
 
 test("rejects bare, wildcard, duplicate openid, and unsupported model scopes", () => {
