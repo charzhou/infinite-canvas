@@ -18,19 +18,56 @@ const config = loadOidcConfig({
 
 if (!config) throw new Error("测试 OIDC 配置缺失");
 
-function authenticatedCookie() {
+const gatewayConfig = loadOidcConfig({
+    OIDC_ISSUER: "https://issuer.example",
+    OIDC_GATEWAY_BASE_URL: "https://cdn.example",
+    OIDC_CLIENT_ID: "canvas-client",
+    OIDC_CLIENT_SECRET: "client-secret",
+    OIDC_SESSION_KEY: Buffer.alloc(32, 9).toString("base64url"),
+    OIDC_REQUESTED_SCOPES: "openid llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra",
+    PUBLIC_ORIGIN: "https://canvas.example",
+});
+
+if (!gatewayConfig) throw new Error("测试 OIDC 网关配置缺失");
+
+function authenticatedCookie(activeConfig = config) {
     const session = sealCookie(
         {
             accessToken: "derived-token",
             subject: "subject-1",
-            issuer: config.issuer.origin,
-            scopes: config.scopes,
+            issuer: activeConfig.issuer.origin,
+            scopes: activeConfig.scopes,
             createdAt: new Date().toISOString(),
         },
-        config.sessionKey,
+        activeConfig.sessionKey,
     );
     return `${sessionCookie.name}=${session}`;
 }
+
+test("proxy resolves image generations through the gateway base url", async () => {
+    let upstreamOrigin: string | undefined;
+    let upstreamPath: string | undefined;
+    const app = createApp(gatewayConfig, {
+        proxy: {
+            fetch: async (url) => {
+                const target = new URL(url);
+                upstreamOrigin = target.origin;
+                upstreamPath = target.pathname;
+                return new Response(JSON.stringify({ created: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+            },
+        },
+    });
+
+    const response = await request(app)
+        .post("/api/oidc/proxy/v1/images/generations")
+        .set("Origin", "https://canvas.example")
+        .set("Cookie", authenticatedCookie(gatewayConfig))
+        .send({ model: "gpt-image-2", prompt: "test" });
+
+    assert.equal(response.status, 200);
+    assert.equal(upstreamOrigin, "https://cdn.example");
+    assert.equal(upstreamPath, "/v1/images/generations");
+});
 
 test("proxy injects the cookie-derived bearer token and drops browser credentials", async () => {
     let upstreamHeaders: Headers | undefined;

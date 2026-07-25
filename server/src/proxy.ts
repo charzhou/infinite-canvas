@@ -107,7 +107,7 @@ export async function proxyGatewayRequest(config: OidcConfig, request: Request, 
             signal: AbortSignal.timeout(config.proxyTimeoutMs),
             dispatcher: (dependencies.dispatcherFor || dispatcherFor)(config.proxyTimeoutMs),
         } as RequestInit & { duplex: "half"; dispatcher: Dispatcher };
-        const url = new URL(target, config.issuer);
+        const url = new URL(target, config.gatewayBaseUrl);
         const gatewayFetch = () => dependencies.fetch
             ? dependencies.fetch(url, init)
             : undiciFetch(url, init as Parameters<typeof undiciFetch>[1]) as unknown as Promise<globalThis.Response>;
