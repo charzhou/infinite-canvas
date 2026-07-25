@@ -2,6 +2,12 @@
 
 ## Unreleased
 
++ [优化] OIDC 受限代理新增统一的 10 分钟上游请求超时配置。
++ [修复] xAI 视频完成后改经内容端点下载，避免依赖短时有效的结果 URL。
++ [优化] 本地 OIDC BFF 开发环境可通过 Git 忽略的 `server/.env.local` 固定会话密钥，重启服务无需重复授权。
++ [修复] OIDC BFF 放行 Grok 视频生成所需的 `/v1/videos/generations` 受限代理路径。
++ [修复] OIDC 托管的 Grok 视频模型不再错误要求浏览器配置 API Key。
++ [新增] 增加浏览器作用域、Provider 名称可配置的 OIDC 算力渠道，通过同源 BFF 安全使用受批准模型。
 + [新增] 提供 Knative Service 部署清单 `deploy/knative/service.yaml`，可将静态站点部署到 Knative 集群并缩容到 0。
 + [修复] Docker 镜像构建工作流改为推送到当前仓库所属的 GHCR 命名空间，fork 仓库可正常发布自己的镜像。
 + [新增] 提示词来源新增 Banana Prompt Quicker，并支持添加自定义标准 JSON 来源。

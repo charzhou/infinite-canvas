@@ -9,6 +9,7 @@ export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ChannelModel = {
     name: string;
     capability: ModelCapability;
+    apiFormat?: ApiCallFormat;
     script?: string;
 };
 
@@ -18,6 +19,7 @@ export type ModelChannel = {
     baseUrl: string;
     apiKey: string;
     apiFormat: ApiCallFormat;
+    authMode?: "manual" | "oidc";
     models: ChannelModel[];
 };
 
@@ -48,6 +50,8 @@ export type AiConfig = {
     count: string;
     canvasImageCount: string;
 };
+
+export type ModelRequestConfig = AiConfig & Pick<ModelChannel, "authMode">;
 
 export type WebdavSyncConfig = {
     url: string;
@@ -159,8 +163,9 @@ export function modelMatchesCapability(config: AiConfig, value: string, capabili
 }
 
 export function selectableModelsByCapability(config: AiConfig, capability?: ModelCapability) {
-    if (!capability) return config.models;
-    return config.channels.flatMap((channel) => channel.models.filter((model) => model.capability === capability).map((model) => encodeChannelModel(channel.id, model.name)));
+    return config.channels
+        .filter((channel) => channel.baseUrl.trim() && (channel.authMode === "oidc" || channel.apiKey.trim()))
+        .flatMap((channel) => channel.models.filter((model) => !capability || model.capability === capability).map((model) => encodeChannelModel(channel.id, model.name)));
 }
 
 /** The user script (if any) attached to a model; empty string means use the system default call. */
@@ -170,7 +175,7 @@ export function resolveModelScript(config: AiConfig, value: string) {
 
 function isAiConfigReady(config: AiConfig, model: string) {
     const channel = resolveModelChannel(config, model);
-    return Boolean(model.trim() && channel.baseUrl.trim() && channel.apiKey.trim());
+    return Boolean(model.trim() && channel.baseUrl.trim() && (channel.authMode === "oidc" || channel.apiKey.trim()));
 }
 
 export const useConfigStore = create<ConfigStore>()(
@@ -255,7 +260,8 @@ export function normalizeChannelModels(models: Array<string | ChannelModel> | un
         seen.add(name);
         const capability = typeof item === "string" ? guessCapability(name) : item.capability || guessCapability(name);
         const script = typeof item === "string" ? undefined : item.script?.trim() || undefined;
-        result.push({ name, capability, script });
+        const apiFormat = typeof item === "string" ? undefined : item.apiFormat && normalizeApiFormat(item.apiFormat);
+        result.push({ name, capability, ...(apiFormat ? { apiFormat } : {}), script });
     }
     return result;
 }
@@ -268,6 +274,7 @@ export function createModelChannel(channel?: Partial<ModelChannel>): ModelChanne
         baseUrl: channel?.baseUrl?.trim() || defaultBaseUrlForApiFormat(apiFormat),
         apiKey: channel?.apiKey || "",
         apiFormat,
+        authMode: channel?.authMode === "oidc" ? "oidc" : "manual",
         models: normalizeChannelModels(channel?.models),
     };
 }
@@ -320,14 +327,40 @@ export function resolveModelChannel(config: AiConfig, value: string) {
     return matched || config.channels[0] || createModelChannel({ id: "default", name: "默认渠道", baseUrl: config.baseUrl, apiKey: config.apiKey, apiFormat: config.apiFormat, models: config.models.map(modelOptionName).map((name) => ({ name, capability: guessCapability(name) })) });
 }
 
-export function resolveModelRequestConfig(config: AiConfig, value: string) {
+export function resolveModelRequestConfig(config: AiConfig, value: string): ModelRequestConfig {
     const channel = resolveModelChannel(config, value);
+    const model = findChannelModel(config, value)?.model;
     return {
         ...config,
         model: modelOptionName(value || config.model),
         baseUrl: channel.baseUrl,
         apiKey: channel.apiKey,
-        apiFormat: channel.apiFormat,
+        apiFormat: model?.apiFormat || channel.apiFormat,
+        authMode: channel.authMode,
+    };
+}
+
+export function syncManagedOidcChannel(config: AiConfig, channel: ModelChannel) {
+    return withNormalizedChannels(config, [...config.channels.filter((item) => item.id !== "oidc"), createModelChannel({ ...channel, id: "oidc", authMode: "oidc" })]);
+}
+
+export function removeOidcChannel(config: AiConfig) {
+    return withNormalizedChannels(config, config.channels.filter((channel) => channel.authMode !== "oidc" && channel.id !== "oidc"));
+}
+
+function withNormalizedChannels(config: AiConfig, channels: ModelChannel[]): AiConfig {
+    const models = modelOptionsFromChannels(channels);
+    const next = { ...config, channels, models };
+    const pick = (capability: ModelCapability, current: string) => {
+        const value = normalizeModelOptionValue(current, channels);
+        return selectableModelsByCapability(next, capability).includes(value) ? value : selectableModelsByCapability(next, capability)[0] || "";
+    };
+    return {
+        ...next,
+        imageModel: pick("image", config.imageModel),
+        videoModel: pick("video", config.videoModel),
+        textModel: pick("text", config.textModel),
+        audioModel: pick("audio", config.audioModel),
     };
 }
 

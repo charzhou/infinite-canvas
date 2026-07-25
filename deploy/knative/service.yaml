@@ -17,6 +17,21 @@ spec:
         - image: ghcr.io/charzhou/infinite-canvas:v0.9.1
           ports:
             - containerPort: 3000
+          env:
+            - name: OIDC_ISSUER
+              valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_ISSUER, optional: true } }
+            - name: OIDC_CLIENT_ID
+              valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_CLIENT_ID, optional: true } }
+            - name: OIDC_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_CLIENT_SECRET, optional: true } }
+            - name: OIDC_SESSION_KEY
+              valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_SESSION_KEY, optional: true } }
+            - name: OIDC_PROVIDER_NAME
+              valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_PROVIDER_NAME, optional: true } }
+            - name: OIDC_REQUESTED_SCOPES
+              valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_REQUESTED_SCOPES, optional: true } }
+            - name: PUBLIC_ORIGIN
+              valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: PUBLIC_ORIGIN, optional: true } }
           # 统计分析（可选，默认关闭）。填了谁就启用谁，可同时启用多家：
           # - name: ANALYTICS_GA4_ID
           #   value: G-XXXXXXXXXX

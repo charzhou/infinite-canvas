@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
 import { App } from "antd";
+import axios from "axios";
 
 import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
 import { usePromptSourceScheduler } from "@/hooks/use-prompt-source-scheduler";
+import { useOidcStore } from "@/stores/use-oidc-store";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
@@ -13,6 +15,21 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
 
     usePromptSourceScheduler();
+
+    useEffect(() => {
+        void useOidcStore.getState().refresh();
+        const interceptor = axios.interceptors.response.use(
+            (response) => response,
+            (error) => {
+                if (error.response?.headers?.["x-oidc-session-invalid"] === "1" && useOidcStore.getState().connected) {
+                    useOidcStore.getState().invalidate();
+                    message.warning("受管理渠道的授权已失效，请重新连接");
+                }
+                return Promise.reject(error);
+            },
+        );
+        return () => axios.interceptors.response.eject(interceptor);
+    }, [message]);
 
     useEffect(() => {
         if (handledConfigParams.current) return;

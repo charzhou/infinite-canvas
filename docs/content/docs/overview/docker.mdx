@@ -29,6 +29,23 @@ http://localhost:3000
 docker compose -f docker-compose.local.yml up -d --build
 ```
 
+## OIDC 算力渠道
+
+OIDC 渠道由同源 BFF 提供，GitHub Pages 等纯静态部署不能使用，仍可继续配置手动 API Key 渠道。配置以下部署变量后，应用会显示变量 `OIDC_PROVIDER_NAME` 指定的受管理渠道：
+
+```text
+OIDC_ISSUER=https://api.example.com
+OIDC_CLIENT_ID=oc-example
+OIDC_CLIENT_SECRET=...
+OIDC_SESSION_KEY=...
+OIDC_PROXY_TIMEOUT_MS=600000
+OIDC_PROVIDER_NAME=Provider 名称
+OIDC_REQUESTED_SCOPES=openid llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra
+PUBLIC_ORIGIN=https://canvas.example.com
+```
+
+`PUBLIC_ORIGIN` 必须是 HTTPS 的公开站点地址，并在 Provider 注册精确回调地址：`{PUBLIC_ORIGIN}/api/oidc/callback`。`OIDC_SESSION_KEY` 必须是 base64url 编码的 32 字节随机密钥。`OIDC_PROXY_TIMEOUT_MS` 统一为 `600000`（10 分钟），用于受限上游代理请求。修改 scope 列表会使已有浏览器会话重新授权。
+
 ## 文档站镜像
 
 文档站位于 `docs/` 目录，按带服务端能力的 Next.js standalone 应用单独构建，不打进主应用镜像。

@@ -5,6 +5,16 @@ services:
     ports:
       - "3000:3000"
     restart: unless-stopped
+    # OIDC 算力渠道（可选；所有值由部署环境提供）：
+    # environment:
+    #   OIDC_ISSUER: https://api.example.com
+    #   OIDC_CLIENT_ID: oc-example
+    #   OIDC_CLIENT_SECRET: change-me
+    #   OIDC_SESSION_KEY: change-me-base64url-32-bytes
+    #   OIDC_PROXY_TIMEOUT_MS: 600000
+    #   OIDC_PROVIDER_NAME: Provider 名称
+    #   OIDC_REQUESTED_SCOPES: openid llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra
+    #   PUBLIC_ORIGIN: https://canvas.example.com
     # 统计分析（可选，默认关闭）。每家一个独立变量，填了谁就启用谁，可同时启用多家：
     # environment:
     #   ANALYTICS_GA4_ID: G-XXXXXXXXXX                    # Google Analytics 4 衡量 ID

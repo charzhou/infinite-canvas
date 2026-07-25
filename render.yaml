@@ -8,3 +8,19 @@ services:
     envVars:
       - key: PORT
         value: 3000
+      - key: OIDC_ISSUER
+        sync: false
+      - key: OIDC_CLIENT_ID
+        sync: false
+      - key: OIDC_CLIENT_SECRET
+        sync: false
+      - key: OIDC_SESSION_KEY
+        sync: false
+      - key: OIDC_PROXY_TIMEOUT_MS
+        value: 600000
+      - key: OIDC_PROVIDER_NAME
+        sync: false
+      - key: OIDC_REQUESTED_SCOPES
+        sync: false
+      - key: PUBLIC_ORIGIN
+        sync: false
