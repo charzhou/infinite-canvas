@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.10.2 - 2026-07-25
+
 + [新增] OIDC 算力渠道部署补充可选 `OIDC_GATEWAY_BASE_URL`，并统一更新 Knative/Render/Docker 的 CDN 加速说明与当前镜像版本。
 
 ## v0.10.1 - 2026-07-25
