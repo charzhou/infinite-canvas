@@ -23,7 +23,7 @@ type SeedanceTask = {
 };
 type XaiVideoTask = {
     request_id?: string;
-    status?: "pending" | "done" | "failed" | "expired";
+    status?: "pending" | "done" | "completed" | "failed" | "expired";
     video?: { url?: string } | null;
     error?: { message?: string } | string | null;
 };
@@ -207,7 +207,7 @@ async function createXaiVideoTask(config: AiConfig, model: string, prompt: strin
 async function pollXaiVideoTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
     try {
         const state = (await axios.get<XaiVideoTask>(aiApiUrl(config, `/videos/${task.id}`), { headers: aiHeaders(config), signal: options?.signal })).data;
-        if (state.status === "done") {
+        if (state.status === "done" || state.status === "completed") {
             const content = await axios.get<Blob>(aiApiUrl(config, `/videos/${task.id}/content`), { headers: aiHeaders(config), responseType: "blob", signal: options?.signal });
             await assertVideoBlob(content.data);
             return { status: "completed", result: { blob: content.data } };

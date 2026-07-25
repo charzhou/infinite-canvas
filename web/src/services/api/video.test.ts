@@ -32,3 +32,13 @@ it("downloads a completed xAI video through the channel content endpoint", async
     expect(axios.get).toHaveBeenNthCalledWith(1, "/api/oidc/proxy/v1/videos/video-request", { headers: { Authorization: "Bearer " }, signal: undefined });
     expect(axios.get).toHaveBeenNthCalledWith(2, "/api/oidc/proxy/v1/videos/video-request/content", { headers: { Authorization: "Bearer " }, responseType: "blob", signal: undefined });
 });
+
+it("treats the provider completed status as an xAI video result", async () => {
+    const content = new Blob(["video"], { type: "video/mp4" });
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { status: "completed", video: { url: "https://expired.example/video.mp4" } } })
+        .mockResolvedValueOnce({ data: content });
+
+    await expect(pollVideoGenerationTask(oidcXaiConfig, { id: "video-request", provider: "xai", model: "oidc::grok-imagine-video" }))
+        .resolves.toEqual({ status: "completed", result: { blob: content } });
+});
