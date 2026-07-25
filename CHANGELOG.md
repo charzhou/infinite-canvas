@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.10.1 - 2026-07-25
+
 + [调整] Knative Serving 清单改用内置 OIDC BFF 的 v0.9.2 镜像，补充 10 分钟请求超时、OIDC Secret 模板和部署说明。
 
 ## v0.10.0 - 2026-07-25
