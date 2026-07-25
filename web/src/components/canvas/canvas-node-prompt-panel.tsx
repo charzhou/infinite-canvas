@@ -39,9 +39,11 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     const isEditingExistingContent = hasTextContent || hasImageContent;
     const [prompt, setPrompt] = useState(isEditingExistingContent ? "" : node.metadata?.prompt || "");
 
+    // 仅在切换到其它节点时重置输入框;同一节点生成完成后(内容写回自身导致 isEditingExistingContent 变化)保留用户输入
     useEffect(() => {
         setPrompt(isEditingExistingContent ? "" : node.metadata?.prompt || "");
-    }, [isEditingExistingContent, node.id]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [node.id]);
 
     const updatePrompt = (value: string) => {
         setPrompt(value);
@@ -52,7 +54,6 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
         const text = prompt.trim();
         if (!text || isRunning) return;
         onGenerate(node.id, mode, text);
-        setPrompt("");
     };
 
     return (

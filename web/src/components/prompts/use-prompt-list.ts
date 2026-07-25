@@ -5,10 +5,10 @@ import { ALL_PROMPTS_OPTION, fetchPrompts } from "@/services/api/prompts";
 
 export const PROMPT_PAGE_SIZE = 20;
 
-export function usePromptList({ keyword, tags, category, enabled = true }: { keyword: string; tags: string[]; category: string; enabled?: boolean }) {
+export function usePromptList({ keyword, tags, category, enabled = true, includePersonal = false }: { keyword: string; tags: string[]; category: string; enabled?: boolean; includePersonal?: boolean }) {
     const query = useInfiniteQuery({
-        queryKey: ["prompts", keyword, tags, category],
-        queryFn: ({ pageParam }) => fetchPrompts({ keyword, tag: tags, category, page: pageParam, pageSize: PROMPT_PAGE_SIZE }),
+        queryKey: ["prompts", keyword, tags, category, includePersonal],
+        queryFn: ({ pageParam }) => fetchPrompts({ keyword, tag: tags, category, page: pageParam, pageSize: PROMPT_PAGE_SIZE, includePersonal }),
         initialPageParam: 1,
         getNextPageParam: (lastPage, pages) => (pages.reduce((total, page) => total + page.items.length, 0) < lastPage.total ? pages.length + 1 : undefined),
         enabled,

@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { App, Button, Input, Segmented, Tooltip } from "antd";
 import copyToClipboard from "copy-to-clipboard";
-import { Copy, FolderOpen, History, KeyRound, Link2, LoaderCircle, PlugZap, Plus, RefreshCw, Square, Terminal, Trash2 } from "lucide-react";
+import { ChevronDown, Copy, FolderOpen, History, KeyRound, Link2, LoaderCircle, MessageSquare, PlugZap, Plus, RefreshCw, Square, Terminal, Trash2 } from "lucide-react";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { imageMetadata } from "@/lib/canvas/canvas-node-factory";
@@ -20,6 +20,7 @@ import { AgentChatComposer, AgentChatMessage, AgentPanelTabs, AgentPendingToolCa
 
 const MAX_ATTACHMENTS = 6;
 const MAX_ATTACHMENT_PAYLOAD_BYTES = 28 * 1024 * 1024;
+const SCROLL_BOTTOM_THRESHOLD = 48;
 const DEFAULT_AGENT_URL = "http://127.0.0.1:17371";
 const AGENT_CONNECT_STEPS = [
     { title: "方式一：在 Codex 中使用插件", text: "在 Codex app 安装 Infinite Canvas 插件后，通过插件启动画布，插件会自动启动本地 Agent 并带上连接信息。" },
@@ -90,6 +91,8 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
     const pushEventLog = useAgentStore((state) => state.addEventLog);
     const clearEventLogs = useAgentStore((state) => state.clearEventLogs);
     const listRef = useRef<HTMLDivElement>(null);
+    const followMessagesRef = useRef(true);
+    const [showScrollToBottom, setShowScrollToBottom] = useState(false);
     const canvasContextRef = useRef<AgentCanvasContext | null>(useAgentStore.getState().canvasContext);
     const confirmToolsRef = useRef(confirmTools);
     const pendingToolRef = useRef<AgentPendingToolCall | null>(null);
@@ -143,9 +146,30 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
     useEffect(() => {
         pendingToolRef.current = pendingTool;
     }, [pendingTool]);
+    const updateScrollState = useCallback(() => {
+        const list = listRef.current;
+        if (!list) return;
+        const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
+        followMessagesRef.current = atBottom;
+        setShowScrollToBottom(!atBottom);
+    }, []);
+    const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+        const list = listRef.current;
+        if (!list) return;
+        followMessagesRef.current = true;
+        list.scrollTo({ top: list.scrollHeight, behavior });
+        setShowScrollToBottom(false);
+    }, []);
     useEffect(() => {
-        listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-    }, [messages, pendingTool, waiting]);
+        if (activeTab !== "chat") return;
+        const frame = requestAnimationFrame(() => scrollToBottom("auto"));
+        return () => cancelAnimationFrame(frame);
+    }, [activeTab, activeThreadId, scrollToBottom]);
+    useEffect(() => {
+        if (activeTab !== "chat") return;
+        const frame = requestAnimationFrame(() => (followMessagesRef.current ? scrollToBottom("auto") : updateScrollState()));
+        return () => cancelAnimationFrame(frame);
+    }, [activeTab, messages, pendingTool, scrollToBottom, updateScrollState, waiting]);
     useEffect(() => () => attachmentUrlsRef.current.forEach((url) => URL.revokeObjectURL(url)), []);
 
     useEffect(() => {
@@ -603,7 +627,7 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
                 theme={theme}
                 items={[
                     { value: "setup", label: "连接", icon: <PlugZap className="size-3.5" /> },
-                    { value: "chat", label: "对话" },
+                    { value: "chat", label: "对话", icon: <MessageSquare className="size-3.5" /> },
                     { value: "history", label: "历史", icon: <History className="size-3.5" />, count: threads.length },
                     { value: "log", label: "日志", icon: <Terminal className="size-3.5" />, count: eventLogs.length },
                 ]}
@@ -658,20 +682,35 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
                 />
             ) : (
                 <>
-                    <div ref={listRef} className="thin-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-                        {messages.map((item) => (
-                            <AgentChatMessage key={item.id} item={agentMessageToChatMessage(item)} theme={theme} user={user} />
-                        ))}
-                        {pendingTool ? (
-                            <AgentPendingToolCard
-                                summary={summarizeCanvasAgentOps(pendingTool.input?.ops || []) || toolName(pendingTool.name)}
-                                detail={{ requestId: pendingTool.requestId, name: pendingTool.name, input: pendingTool.input }}
-                                theme={theme}
-                                onReject={rejectPendingTool}
-                                onApprove={approvePendingTool}
-                            />
+                    <div className="relative min-h-0 flex-1">
+                        <div ref={listRef} className="thin-scrollbar h-full space-y-4 overflow-y-auto px-4 pb-12 pt-4" onScroll={updateScrollState}>
+                            {messages.map((item) => (
+                                <AgentChatMessage key={item.id} item={agentMessageToChatMessage(item)} theme={theme} user={user} />
+                            ))}
+                            {pendingTool ? (
+                                <AgentPendingToolCard
+                                    summary={summarizeCanvasAgentOps(pendingTool.input?.ops || []) || toolName(pendingTool.name)}
+                                    detail={{ requestId: pendingTool.requestId, name: pendingTool.name, input: pendingTool.input }}
+                                    theme={theme}
+                                    onReject={rejectPendingTool}
+                                    onApprove={approvePendingTool}
+                                />
+                            ) : null}
+                            {waiting && !pendingTool ? <AgentWorkingMessage theme={theme} /> : null}
+                        </div>
+                        {showScrollToBottom ? (
+                            <Tooltip title="滚动到底部" placement="left">
+                                <Button
+                                    type="text"
+                                    shape="circle"
+                                    aria-label="滚动到底部"
+                                    className="!absolute bottom-3 left-1/2 z-10 !h-8 !w-8 !min-w-8 -translate-x-1/2 backdrop-blur transition hover:-translate-y-0.5"
+                                    style={{ background: theme.toolbar.panel, border: `1px solid ${theme.node.stroke}`, color: theme.node.text }}
+                                    icon={<ChevronDown className="size-4" />}
+                                    onClick={() => scrollToBottom()}
+                                />
+                            </Tooltip>
                         ) : null}
-                        {waiting && !pendingTool ? <AgentWorkingMessage theme={theme} /> : null}
                     </div>
                     <AgentChatComposer
                         prompt={prompt}
