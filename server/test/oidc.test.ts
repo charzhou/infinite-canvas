@@ -4,12 +4,13 @@ import test from "node:test";
 import { parse as parseCookie } from "cookie";
 import request from "supertest";
 
-import { transactionCookie } from "../src/cookies.js";
+import { sealCookie, sessionCookie, transactionCookie } from "../src/cookies.js";
 import { loadOidcConfig } from "../src/config.js";
 import { createApp } from "../src/app.js";
 
 const scopes = [
     "openid",
+    "offline_access",
     "llm:grok:grok-imagine-image",
     "llm:grok:grok-imagine-image-quality",
     "llm:grok:grok-imagine-video",
@@ -52,7 +53,7 @@ function createTestApp() {
             discoveryFor: async () => discovery,
             exchangeCode: async () => {
                 exchangeCalls += 1;
-                return { accessToken: "derived-token", idToken: "id-token", scope: scopes };
+                return { accessToken: "derived-token", idToken: "id-token", refreshToken: "refresh-token", expiresIn: 900, scope: scopes };
             },
             verifyIdToken: async () => "subject-1",
             revoke: async () => {
@@ -98,6 +99,17 @@ test("session endpoints return capability metadata but never the derived token",
     assert.deepEqual(session.body, { connected: true, providerName: "My Compute", approvedScopes: scopes.split(" ") });
     assert.equal(JSON.stringify(session.body).includes("derived-token"), false);
     assert.equal(models.body.some((model: { name: string }) => model.name === "gpt-image-2"), true);
+});
+
+test("session endpoints reject a refresh family past its absolute expiry", async () => {
+    const { app } = createTestApp();
+    const cookie = `${sessionCookie.name}=${sealCookie({ accessToken: "expired-derived-token", refreshToken: "expired-refresh-token", accessTokenExpiresAt: Date.now(), refreshTokenExpiresAt: Date.now() - 1, subject: "subject-1", issuer: config.issuer.origin, scopes: config.scopes, createdAt: new Date().toISOString() }, config.sessionKey)}`;
+
+    const response = await request(app).get("/api/oidc/session").set("Cookie", cookie);
+
+    assert.equal(response.status, 401);
+    assert.equal(response.headers["x-oidc-session-invalid"], "1");
+    assert.match(response.headers["set-cookie"].join(";"), /oidc_session=;/);
 });
 
 test("disconnect always clears the browser session after requesting upstream revocation", async () => {

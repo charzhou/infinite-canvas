@@ -25,9 +25,11 @@ export const transactionCookie = {
     options: (config: OidcConfig) => cookieOptions(config, 10 * 60 * 1000),
 };
 
+export const refreshSessionLifetimeMs = 30 * 24 * 60 * 60 * 1000;
+
 export const sessionCookie = {
     name: "oidc_session",
-    options: (config: OidcConfig) => cookieOptions(config, 30 * 24 * 60 * 60 * 1000),
+    options: (config: OidcConfig, maxAge = refreshSessionLifetimeMs) => cookieOptions(config, maxAge),
 };
 
 export function sealCookie<T>(value: T, key: Uint8Array) {

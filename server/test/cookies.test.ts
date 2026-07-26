@@ -14,8 +14,10 @@ test("opens an encrypted cookie envelope with its original key", () => {
 
 test("cookie ciphertext cannot be opened after tampering", () => {
     const sealed = sealCookie({ token: "derived-token" }, testKey);
+    const [nonce, tag, ciphertext] = sealed.split(".");
+    const replacement = tag[0] === "A" ? "B" : "A";
 
-    assert.equal(openCookie<{ token: string }>(`${sealed.slice(0, -1)}x`, testKey), null);
+    assert.equal(openCookie<{ token: string }>(`${nonce}.${replacement}${tag.slice(1)}.${ciphertext}`, testKey), null);
 });
 
 test("returns null for malformed cookie envelopes", () => {

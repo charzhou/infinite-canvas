@@ -29,6 +29,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 - Provider 返回 `status: "completed"` 时，应立即经 `/v1/videos/{request_id}/content` 下载并结束轮询，不依赖短时有效的 `video.url`。
 - 视频状态轮询遇到一次上游 TCP 连接重置时应自动重试并继续展示状态；视频生成 `POST` 发生同类错误不得自动重试。
 - 本地开发使用 `server/.env.local` 启动 BFF 后，重启 BFF 并刷新页面，应保持 OIDC 已连接状态且无需再次授权。
+- OIDC 会话持续超过 15 分钟后发起两个并发生成请求，BFF 应只刷新一次并继续使用受管理模型；断开连接或 Provider 返回 `invalid_grant` 后应清除会话并要求重新授权。
 - 受管理渠道的上游请求和视频内容下载在 10 分钟内可持续完成；超过 `OIDC_PROXY_TIMEOUT_MS=600000` 时应停止并返回网关错误。
 - 重启浏览器后会话仍可用；点击断开后浏览器会话清除且上游授权被撤销。
 - Provider 返回失效 token 时，受管理渠道自动移除并提示重新连接；修改 scope 后旧会话要求重新授权。

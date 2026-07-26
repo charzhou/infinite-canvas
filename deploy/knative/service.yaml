@@ -16,7 +16,7 @@ spec:
       # 与 OIDC BFF 的 OIDC_PROXY_TIMEOUT_MS=600000 保持一致。
       timeoutSeconds: 600
       containers:
-        - image: ghcr.io/charzhou/infinite-canvas:v0.10.1
+        - image: ghcr.io/charzhou/infinite-canvas:v0.10.3
           ports:
             - containerPort: 3000
           env:

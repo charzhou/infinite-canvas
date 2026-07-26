@@ -28,7 +28,8 @@ const approvedModels: OidcModel[] = [
     { scope: "llm:openai:gpt-5.6-terra", platform: "openai", name: "gpt-5.6-terra", apiFormat: "openai", capability: "text" },
 ];
 
-const approvedScopes = new Set(["openid", ...approvedModels.map((model) => model.scope)]);
+const standardScopes = new Set(["openid", "profile", "email", "offline_access"]);
+const approvedScopes = new Set([...standardScopes, ...approvedModels.map((model) => model.scope)]);
 const defaultProxyTimeoutMs = 600_000;
 
 function normalizedOrigin(value: string, name: string) {
@@ -53,16 +54,14 @@ function proxyTimeout(value: string | undefined) {
 
 export function parseScopes(value: string) {
     const values = value.trim().split(/\s+/).filter(Boolean);
-    if (values.filter((scope) => scope === "openid").length !== 1) {
-        throw new Error("OIDC_REQUESTED_SCOPES 必须且只能包含一个 openid");
-    }
-    const scopes = [...new Set(values)];
+    if (new Set(values).size !== values.length) throw new Error("OIDC_REQUESTED_SCOPES 不能包含重复 scope");
+    if (!values.includes("openid")) throw new Error("OIDC_REQUESTED_SCOPES 必须包含 openid");
+    if (!values.includes("offline_access")) throw new Error("OIDC_REQUESTED_SCOPES 必须包含 offline_access");
+    const scopes = values;
     if (scopes.some((scope) => scope === "llm" || !approvedScopes.has(scope))) {
         throw new Error("OIDC_REQUESTED_SCOPES 包含不受支持的 scope");
     }
-    if (scopes.length !== approvedScopes.size || scopes.some((scope) => !approvedScopes.has(scope))) {
-        throw new Error("OIDC_REQUESTED_SCOPES 必须包含当前批准的全部模型 scope");
-    }
+    if (!scopes.some((scope) => scope.startsWith("llm:"))) throw new Error("OIDC_REQUESTED_SCOPES 必须包含至少一个模型 scope");
     return scopes;
 }
 

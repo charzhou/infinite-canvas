@@ -5,6 +5,7 @@ import { loadOidcConfig } from "../src/config.js";
 
 const approvedScopes = [
     "openid",
+    "offline_access",
     "llm:grok:grok-imagine-image",
     "llm:grok:grok-imagine-image-quality",
     "llm:grok:grok-imagine-video",
@@ -61,13 +62,23 @@ test("rejects gateway base url paths", () => {
 
 test("rejects bare, wildcard, duplicate openid, and unsupported model scopes", () => {
     for (const scope of [
-        "openid llm",
-        "openid llm:openai:*",
-        "openid openid llm:openai:gpt-image-2",
-        "openid llm:openai:gpt-4.1",
+        "openid offline_access llm",
+        "openid offline_access llm:openai:*",
+        "openid offline_access openid llm:openai:gpt-image-2",
+        "openid offline_access llm:openai:gpt-4.1",
     ]) {
         assert.throws(() => loadOidcConfig({ ...testEnv, OIDC_REQUESTED_SCOPES: scope }));
     }
+});
+
+test("accepts offline access and a configured subset of mapped model scopes", () => {
+    const config = loadOidcConfig({
+        ...testEnv,
+        OIDC_REQUESTED_SCOPES: "openid offline_access llm:openai:gpt-image-2",
+    });
+
+    assert.deepEqual(config?.scopes, ["openid", "offline_access", "llm:openai:gpt-image-2"]);
+    assert.deepEqual(config?.models.map((model) => model.name), ["gpt-image-2"]);
 });
 
 test("does not enable OIDC when deployment values are absent", () => {

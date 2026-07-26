@@ -26,12 +26,12 @@
 - `OIDC_SESSION_KEY`：base64url 编码的 32 字节高熵会话加密密钥。
 - `OIDC_PROVIDER_NAME`：前端显示名称；未设置时显示为“OIDC Provider”。
 - `PUBLIC_ORIGIN`：当前部署的公开 HTTPS origin，用于生成并校验精确回调 URL。
-- `OIDC_REQUESTED_SCOPES`：空格分隔的精确 OAuth scope。必须含唯一的 `openid`，其余值必须是管理员为该 `client_id` 登记的 `llm:<platform>:<model-alias>`。
+- `OIDC_REQUESTED_SCOPES`：空格分隔的精确 OAuth scope。必须含唯一的 `openid` 和 `offline_access`，可选 `profile`、`email`，其余值必须是管理员为该 `client_id` 登记且被当前渠道映射支持的 `llm:<platform>:<model-alias>`。
 
 当前部署配置的 scope 为：
 
 ```text
-openid llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra
+openid offline_access llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra
 ```
 
 其中 Grok 的两个 imagine image alias 初始归类为图片，两个 imagine video alias 初始归类为视频；`gpt-image-2` 初始归类为图片，`gpt-5.6-terra` 初始归类为文本。不存在音频模型。用户仍可调整已授权模型的能力分类，但不能绕过 scope 增加模型。
@@ -45,9 +45,9 @@ openid llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:
 3. BFF 将浏览器重定向到上游 `authorization_endpoint`，使用 `response_type=code` 与 `OIDC_REQUESTED_SCOPES` 的精确 scope。
 4. 上游完成登录、父 Key 选择或拒绝后，回调 BFF 的注册 URL。
 5. BFF 校验 `state`，使用 HTTP Basic 认证兑换 code，并通过 Discovery 中的 JWKS 校验 ID Token 的 `RS256`、issuer、audience 与 nonce。
-6. BFF 对照配置 scope 验证 token 响应中的规范化 `scope`，加密写入 30 天有效的 `oidc_session` Cookie。其内容仅包含派生 access token、`sub`、issuer、已批准 scope 和必要的连接时间元数据；随后跳转回渠道设置。
+6. BFF 对照配置 scope 验证 token 响应中的规范化 `scope`，加密写入 `oidc_session` Cookie。其内容仅包含派生 access token、轮换 refresh token、两个令牌的到期时间、`sub`、issuer、已批准 scope 和必要的连接时间元数据；随后跳转回渠道设置。
 
-两个 Cookie 都使用 `HttpOnly`、`SameSite=Lax`、`Path=/`；生产环境额外使用 `Secure`。Cookie 内容采用 AES-256-GCM 加密与认证，序列化使用 base64url；BFF 必须拒绝解密失败、过期或超出浏览器 Cookie 限制的值。关闭并重新打开浏览器后会话仍有效，但达到 30 天、清除 Cookie、主动断开或上游判定 token 无效后必须重新授权。
+两个 Cookie 都使用 `HttpOnly`、`SameSite=Lax`、`Path=/`；生产环境额外使用 `Secure`。Cookie 内容采用 AES-256-GCM 加密与认证，序列化使用 base64url；BFF 必须拒绝解密失败、过期或超出浏览器 Cookie 限制的值。access token 为 15 分钟有效，BFF 在代理前于其剩余一分钟内使用 refresh token 换取新 access token、ID Token 和 refresh token，并立刻以新加密 Cookie 替换旧值；refresh family 的绝对有效期为首次授权后的 30 天，不会因轮换延长。关闭并重新打开浏览器后会话仍有效，但达到 30 天、清除 Cookie、主动断开或上游返回 `invalid_grant` 后必须重新授权。
 
 不使用 Redis、数据库或无限画布用户账户。会话只绑定当前浏览器配置，不能跨浏览器或设备迁移。部署者变更 `OIDC_REQUESTED_SCOPES` 后，已有会话的批准 scope 不再与当前配置匹配时，BFF 必须要求重新授权。
 
@@ -67,7 +67,7 @@ openid llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:
 
 允许的上游路径仅限当前应用所需的模型 API：`/v1`、`/v1beta`、`/antigravity/v1beta` 下经过显式方法与路径规则验证的模型、生成、任务查询和模型列表端点。代理拒绝绝对 URL、路径穿越、未知路径、`/oauth/*`、`/api/v1/*` 和其他管理端点。自定义模型脚本仅可调用解析后仍命中该白名单的相对 Provider 路径；需要任意外部目标的脚本继续使用手填渠道。
 
-所有状态变更接口和代理的非安全方法检查同源 `Origin`。BFF 不向其他 origin 开放 CORS。上游返回 `invalid_token`、401 或明确的授权撤销结果时，BFF 清除会话并以可识别错误返回，前端将该渠道标记为需要重新连接。
+所有状态变更接口和代理的非安全方法检查同源 `Origin`。BFF 不向其他 origin 开放 CORS。上游返回 `invalid_grant`、`invalid_token`、401 或明确的授权撤销结果时，BFF 清除会话并以可识别错误返回，前端将该渠道标记为需要重新连接。单个 BFF 实例会合并同一旧 refresh token 的并发刷新，避免在同一浏览器会话的并发请求中重放该令牌；部署者应避免将同一个浏览器会话无会话亲和地同时路由到多个实例。
 
 ## 前端渠道模型与体验
 
