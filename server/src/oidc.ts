@@ -15,6 +15,7 @@ export type TokenResponse = {
     idToken: string;
     refreshToken: string;
     expiresIn: number;
+    refreshTokenExpiresAt: number;
     scope: string;
 };
 
@@ -58,11 +59,13 @@ function tokenResponse(payload: unknown, failure: string): TokenResponse {
     if (!payload || typeof payload !== "object") throw new OidcTokenError("server_error", failure);
     const value = payload as Record<string, unknown>;
     const expiresIn = value.expires_in;
+    const refreshTokenExpiresAt = value.refresh_token_expires_at;
     if (
         typeof value.access_token !== "string" || typeof value.id_token !== "string" || typeof value.refresh_token !== "string" ||
-        typeof value.scope !== "string" || typeof expiresIn !== "number" || !Number.isSafeInteger(expiresIn) || expiresIn <= 0
+        typeof value.scope !== "string" || typeof expiresIn !== "number" || !Number.isSafeInteger(expiresIn) || expiresIn <= 0 ||
+        typeof refreshTokenExpiresAt !== "number" || !Number.isSafeInteger(refreshTokenExpiresAt) || refreshTokenExpiresAt <= Math.floor(Date.now() / 1000)
     ) throw new OidcTokenError("server_error", failure);
-    return { accessToken: value.access_token, idToken: value.id_token, refreshToken: value.refresh_token, expiresIn, scope: value.scope };
+    return { accessToken: value.access_token, idToken: value.id_token, refreshToken: value.refresh_token, expiresIn, refreshTokenExpiresAt, scope: value.scope };
 }
 
 async function exchangeToken(config: OidcConfig, endpoint: string, body: URLSearchParams, failure: string): Promise<TokenResponse> {

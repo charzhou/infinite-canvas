@@ -47,7 +47,7 @@ openid offline_access llm:grok:grok-imagine-image llm:grok:grok-imagine-image-qu
 5. BFF 校验 `state`，使用 HTTP Basic 认证兑换 code，并通过 Discovery 中的 JWKS 校验 ID Token 的 `RS256`、issuer、audience 与 nonce。
 6. BFF 对照配置 scope 验证 token 响应中的规范化 `scope`，加密写入 `oidc_session` Cookie。其内容仅包含派生 access token、轮换 refresh token、两个令牌的到期时间、`sub`、issuer、已批准 scope 和必要的连接时间元数据；随后跳转回渠道设置。
 
-两个 Cookie 都使用 `HttpOnly`、`SameSite=Lax`、`Path=/`；生产环境额外使用 `Secure`。Cookie 内容采用 AES-256-GCM 加密与认证，序列化使用 base64url；BFF 必须拒绝解密失败、过期或超出浏览器 Cookie 限制的值。access token 为 15 分钟有效，BFF 在代理前于其剩余一分钟内使用 refresh token 换取新 access token、ID Token 和 refresh token，并立刻以新加密 Cookie 替换旧值；refresh family 的绝对有效期为首次授权后的 30 天，不会因轮换延长。关闭并重新打开浏览器后会话仍有效，但达到 30 天、清除 Cookie、主动断开或上游返回 `invalid_grant` 后必须重新授权。
+两个 Cookie 都使用 `HttpOnly`、`SameSite=Lax`、`Path=/`；生产环境额外使用 `Secure`。Cookie 内容采用 AES-256-GCM 加密与认证，序列化使用 base64url；BFF 必须拒绝解密失败、过期或超出浏览器 Cookie 限制的值。access token 为 15 分钟有效，BFF 在代理前于其剩余一分钟内使用 refresh token 换取新 access token、ID Token 和 refresh token，并立刻以新加密 Cookie 替换旧值；每次 token 响应均须包含并持久化 `refresh_token_expires_at`（UTC Unix 秒），作为 refresh family 的权威绝对到期时间。关闭并重新打开浏览器后会话仍有效，但到达该时间、清除 Cookie、主动断开或上游返回 `invalid_grant` 后必须重新授权。
 
 不使用 Redis、数据库或无限画布用户账户。会话只绑定当前浏览器配置，不能跨浏览器或设备迁移。部署者变更 `OIDC_REQUESTED_SCOPES` 后，已有会话的批准 scope 不再与当前配置匹配时，BFF 必须要求重新授权。
 

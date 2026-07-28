@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## v0.10.4 - 2026-07-28
+
++ [调整] OIDC 算力渠道改用 Provider 返回的 Refresh Token family 绝对到期时间管理浏览器会话。
++ [修复] 本地 Codex Agent 兼容旧版无线程标识的实时事件，避免回复仅在刷新后出现。
+
 ## v0.10.3 - 2026-07-26
 
 + [调整] OIDC 算力渠道使用标准轮换 Refresh Token 自动续期 15 分钟 access token，浏览器会话保持加密存储。

@@ -98,6 +98,7 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
     const pendingToolRef = useRef<AgentPendingToolCall | null>(null);
     const autoConnectRef = useRef(false);
     const connectedRef = useRef(false);
+    const scopedEventsRef = useRef(false);
     const errorLoggedRef = useRef(false);
     const attachmentUrlsRef = useRef(new Set<string>());
     const clientIdRef = useRef(randomId());
@@ -177,19 +178,22 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
         localStorage.setItem("canvas-agent-url", endpoint);
         localStorage.setItem("canvas-agent-token", token);
         const clientId = clientIdRef.current;
+        scopedEventsRef.current = false;
         let eventQueue = Promise.resolve();
         const enqueueEvent = (task: () => void | Promise<void>) => {
             eventQueue = eventQueue.then(task).catch((error) => addEventLog("同步会话失败", error));
         };
         const source = new EventSource(`${endpoint}/events?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(clientId)}`);
         source.addEventListener("hello", (event) => {
-            const busy = Boolean(parseEventData<AgentHelloEvent>(event)?.codex?.busy);
+            const hello = parseEventData<AgentHelloEvent>(event);
+            const busy = Boolean(hello?.codex?.busy);
+            scopedEventsRef.current = Boolean(hello?.codex);
             errorLoggedRef.current = false;
             connectedRef.current = true;
             setAgentState({ connected: true, activity: busy ? "Codex 正在运行" : "已连接", waiting: busy, sending: false, connectError: "", silentConnect: false, messages: useAgentStore.getState().messages.filter((item) => !isConnectionErrorMessage(item)) });
             if (!headless) message.success("本地 Agent 已连接");
             void postState(endpoint, token, clientId, canvasContextRef.current?.snapshot || null);
-            if (document.visibilityState === "visible" && document.hasFocus()) void activateAgentClient(endpoint, token, clientId);
+            if (scopedEventsRef.current && document.visibilityState === "visible" && document.hasFocus()) void activateAgentClient(endpoint, token, clientId);
         });
         source.addEventListener("codex_state", (event) => {
             const data = parseEventData<AgentCodexState>(event);
@@ -207,7 +211,7 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
         source.addEventListener("agent_event", (event) => {
             const data = parseEventData<AgentEventPayload>(event);
             if (data) enqueueEvent(() => {
-                if (isCurrentThreadEvent(data)) handleAgentEvent(data);
+                if (isCurrentThreadEvent(data, !scopedEventsRef.current)) handleAgentEvent(data);
             });
         });
         source.addEventListener("workspace_changed", (event) => {
@@ -224,7 +228,7 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
             const data = parseEventData<AgentChatEvent>(event);
             if (!data?.message) return;
             enqueueEvent(() => {
-                if (!isCurrentThreadEvent(data)) return;
+                if (!isCurrentThreadEvent(data, !scopedEventsRef.current)) return;
                 addMessage(data.message!);
             });
         });
@@ -236,7 +240,7 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
             const data = parseEventData<AgentEventPayload>(event);
             if (!data) return;
             enqueueEvent(() => {
-                if (!isCurrentThreadEvent(data)) return;
+                if (!isCurrentThreadEvent(data, !scopedEventsRef.current)) return;
                 addMessage({ role: "error", title: "错误", text: normalizeText(data.message) });
                 addEventLog("错误", data.message, data.message);
             });
@@ -269,7 +273,7 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
     }, [connected, loadThreads]);
 
     useEffect(() => {
-        if (!connected) return;
+        if (!connected || !scopedEventsRef.current) return;
         const activate = () => void activateAgentClient(endpoint, token, clientIdRef.current);
         const activateVisible = () => {
             if (document.visibilityState === "visible") activate();
@@ -1091,9 +1095,9 @@ function parseEventData<T>(event: Event) {
     }
 }
 
-function isCurrentThreadEvent(event: { threadId?: string; thread_id?: string }) {
+function isCurrentThreadEvent(event: { threadId?: string; thread_id?: string }, allowUnscoped = false) {
     const threadId = event.threadId || event.thread_id || "";
-    return Boolean(threadId) && threadId === useAgentStore.getState().activeThreadId;
+    return threadId ? threadId === useAgentStore.getState().activeThreadId : allowUnscoped;
 }
 
 function formatLogText(logs: AgentEventLog[], context: AgentLogContext) {

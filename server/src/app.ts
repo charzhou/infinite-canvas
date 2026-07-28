@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 import express, { type Express, type Request, type Response } from "express";
 
-import { openCookie, refreshSessionLifetimeMs, sealCookie, sessionCookie, transactionCookie } from "./cookies.js";
+import { openCookie, sealCookie, sessionCookie, transactionCookie } from "./cookies.js";
 import { parseScopes, type OidcConfig } from "./config.js";
 import { discoveryFor, exchangeCode, OidcTokenError, refreshAccessToken, revokeRefreshToken, verifyIdToken, type Discovery, type TokenResponse } from "./oidc.js";
 import { proxyGatewayRequest, proxyPrefix, type ProxyDependencies } from "./proxy.js";
@@ -94,7 +94,7 @@ export function sessionFor(request: Request, config: OidcConfig) {
 }
 
 function sessionMaxAge(session: OidcSessionPayload) {
-    return Math.max(0, Math.min(refreshSessionLifetimeMs, session.refreshTokenExpiresAt - Date.now()));
+    return Math.max(0, session.refreshTokenExpiresAt - Date.now());
 }
 
 function storeSession(response: Response, config: OidcConfig, session: OidcSessionPayload) {
@@ -117,7 +117,7 @@ function newSession(config: OidcConfig, tokens: TokenResponse, subject: string, 
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         accessTokenExpiresAt: now + tokens.expiresIn * 1000,
-        refreshTokenExpiresAt: now + refreshSessionLifetimeMs,
+        refreshTokenExpiresAt: tokens.refreshTokenExpiresAt * 1000,
         subject,
         issuer: config.issuer.origin,
         scopes,
@@ -144,7 +144,6 @@ async function rotatedSession(config: OidcConfig, session: OidcSessionPayload, o
         const subject = await oidc.verifyIdToken(config, discovery, tokens.idToken);
         if (subject !== session.subject) throw new Error("OIDC subject 不匹配");
         const refreshed = newSession(config, tokens, subject, scopes);
-        refreshed.refreshTokenExpiresAt = session.refreshTokenExpiresAt;
         refreshed.createdAt = session.createdAt;
         return refreshed;
     } catch {

@@ -18,6 +18,7 @@ const scopes = [
     "llm:openai:gpt-image-2",
     "llm:openai:gpt-5.6-terra",
 ].join(" ");
+const refreshTokenExpiresAt = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
 
 const config = loadOidcConfig({
     OIDC_ISSUER: "https://issuer.example",
@@ -53,7 +54,7 @@ function createTestApp() {
             discoveryFor: async () => discovery,
             exchangeCode: async () => {
                 exchangeCalls += 1;
-                return { accessToken: "derived-token", idToken: "id-token", refreshToken: "refresh-token", expiresIn: 900, scope: scopes };
+                return { accessToken: "derived-token", idToken: "id-token", refreshToken: "refresh-token", expiresIn: 900, refreshTokenExpiresAt, scope: scopes };
             },
             verifyIdToken: async () => "subject-1",
             revoke: async () => {
@@ -82,6 +83,19 @@ test("callback rejects a mismatched state without exchanging the authorization c
 
     assert.equal(response.status, 302);
     assert.equal(getExchangeCalls(), 0);
+});
+
+test("authorization persists the provider refresh-family expiry", async () => {
+    const { app } = createTestApp();
+    const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config" });
+    const transaction = parseCookie(cookiePair(authorization))[transactionCookie.name];
+    const payload = transaction ? (await import("../src/cookies.js")).openCookie<{ state: string }>(transaction, config.sessionKey) : null;
+    if (!payload) throw new Error("无法读取测试事务 Cookie");
+    const callback = await request(app).get(`/api/oidc/callback?code=code-1&state=${encodeURIComponent(payload.state)}`).set("Cookie", cookiePair(authorization));
+    const value = parseCookie(cookiePair(callback, "oidc_session"))[sessionCookie.name];
+    const session = (await import("../src/cookies.js")).openCookie<{ refreshTokenExpiresAt: number }>(value, config.sessionKey);
+
+    assert.equal(session?.refreshTokenExpiresAt, refreshTokenExpiresAt * 1000);
 });
 
 test("session endpoints return capability metadata but never the derived token", async () => {

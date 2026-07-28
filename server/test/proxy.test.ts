@@ -115,7 +115,7 @@ test("proxy refreshes an expiring session and rotates its encrypted credentials"
             refresh: async (_config, _discovery, refreshToken) => {
                 refreshCalls += 1;
                 assert.equal(refreshToken, "first-refresh-token");
-                return { accessToken: "fresh-derived-token", idToken: "fresh-id-token", refreshToken: "new-refresh-token", expiresIn: 900, scope: config.scopes.join(" ") };
+                return { accessToken: "fresh-derived-token", idToken: "fresh-id-token", refreshToken: "new-refresh-token", expiresIn: 900, refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 3600, scope: config.scopes.join(" ") };
             },
             verifyIdToken: async () => "subject-1",
         },
@@ -153,7 +153,7 @@ test("proxy shares one refresh for concurrent requests from the same browser ses
                 refreshCalls += 1;
                 startRefresh();
                 await finished;
-                return { accessToken: "fresh-derived-token", idToken: "fresh-id-token", refreshToken: "new-refresh-token", expiresIn: 900, scope: config.scopes.join(" ") };
+                return { accessToken: "fresh-derived-token", idToken: "fresh-id-token", refreshToken: "new-refresh-token", expiresIn: 900, refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 3600, scope: config.scopes.join(" ") };
             },
             verifyIdToken: async () => "subject-1",
         },
@@ -193,7 +193,7 @@ test("proxy clears a session when a refreshed cookie exceeds the browser limit",
     const app = createApp(config, {
         oidc: {
             discoveryFor: async () => ({ issuer: config.issuer.origin, authorization_endpoint: "https://issuer.example/oauth/authorize", token_endpoint: "https://issuer.example/oauth/token", revocation_endpoint: "https://issuer.example/oauth/revoke", jwks_uri: "https://issuer.example/oauth/jwks" }),
-            refresh: async () => ({ accessToken: "x".repeat(4_000), idToken: "fresh-id-token", refreshToken: "new-refresh-token", expiresIn: 900, scope: config.scopes.join(" ") }),
+            refresh: async () => ({ accessToken: "x".repeat(4_000), idToken: "fresh-id-token", refreshToken: "new-refresh-token", expiresIn: 900, refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 3600, scope: config.scopes.join(" ") }),
             verifyIdToken: async () => "subject-1",
         },
     });
