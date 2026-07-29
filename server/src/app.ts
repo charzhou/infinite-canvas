@@ -71,10 +71,16 @@ function safeReturnTo(value: unknown, config: OidcConfig) {
     }
 }
 
-function redirectOidcResult(response: Response, returnTo: string | undefined, result: "connected" | "failed", config: OidcConfig) {
+type OidcAuthorizationResult = "connected" | "failed" | "invalid_scope";
+
+function redirectOidcResult(response: Response, returnTo: string | undefined, result: OidcAuthorizationResult, config: OidcConfig) {
     const url = new URL(safeReturnTo(returnTo, config), config.publicOrigin);
     url.searchParams.set("oidc", result);
     response.redirect(302, `${url.pathname}${url.search}${url.hash}`);
+}
+
+function authorizationFailureResult(error: string) {
+    return error === "invalid_scope" ? "invalid_scope" : "failed";
 }
 
 function transactionFor(request: Request, config: OidcConfig) {
@@ -263,10 +269,10 @@ export function createApp(config: OidcConfig | null, dependencies: OidcAppDepend
         const transaction = transactionFor(request, config);
         const state = typeof request.query.state === "string" ? request.query.state : "";
         const code = typeof request.query.code === "string" ? request.query.code : "";
+        const error = typeof request.query.error === "string" ? request.query.error : "";
         response.clearCookie(transactionCookie.name, transactionCookie.options(config));
-        if (!transaction || state !== transaction.state || typeof request.query.error === "string" || !code) {
-            return redirectOidcResult(response, transaction?.returnTo, "failed", config);
-        }
+        if (!transaction || state !== transaction.state) return redirectOidcResult(response, transaction?.returnTo, "failed", config);
+        if (error || !code) return redirectOidcResult(response, transaction.returnTo, authorizationFailureResult(error), config);
         try {
             const discovery = await oidc.discoveryFor(config);
             const tokens = await oidc.exchangeCode(config, discovery, code);

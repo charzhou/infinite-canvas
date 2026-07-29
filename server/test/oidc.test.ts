@@ -88,6 +88,23 @@ test("callback rejects a mismatched state without exchanging the authorization c
     assert.equal(getExchangeCalls(), 0);
 });
 
+test("callback reports invalid_scope without forwarding provider diagnostics", async () => {
+    const { app, getExchangeCalls } = createTestApp();
+    const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config", modelIds });
+    const transaction = parseCookie(cookiePair(authorization))[transactionCookie.name];
+    const payload = transaction ? (await import("../src/cookies.js")).openCookie<{ state: string }>(transaction, config.sessionKey) : null;
+    if (!payload) throw new Error("无法读取测试事务 Cookie");
+
+    const callback = await request(app)
+        .get(`/api/oidc/callback?error=invalid_scope&error_description=scope%20is%20not%20allowed&state=${encodeURIComponent(payload.state)}`)
+        .set("Cookie", cookiePair(authorization));
+
+    assert.equal(callback.status, 302);
+    assert.equal(callback.headers.location, "/config?oidc=invalid_scope");
+    assert.doesNotMatch(callback.headers.location, /error_description|not%20allowed/);
+    assert.equal(getExchangeCalls(), 0);
+});
+
 test("authorization persists the provider refresh-family expiry", async () => {
     const { app } = createTestApp();
     const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config", modelIds });

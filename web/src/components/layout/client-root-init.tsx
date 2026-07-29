@@ -7,6 +7,17 @@ import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
 import { usePromptSourceScheduler } from "@/hooks/use-prompt-source-scheduler";
 import { useOidcStore } from "@/stores/use-oidc-store";
 
+type OidcAuthorizationResult = "failed" | "invalid_scope";
+
+function takeOidcAuthorizationResult(): OidcAuthorizationResult | null {
+    const searchParams = new URLSearchParams(window.location.search);
+    const result = searchParams.get("oidc");
+    if (!result) return null;
+    searchParams.delete("oidc");
+    window.history.replaceState(null, "", `${window.location.pathname}${searchParams.size ? `?${searchParams}` : ""}${window.location.hash}`);
+    return result === "invalid_scope" || result === "failed" ? result : null;
+}
+
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
     const handledConfigParams = useRef(false);
@@ -17,7 +28,10 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     usePromptSourceScheduler();
 
     useEffect(() => {
-        void useOidcStore.getState().refresh();
+        const authorizationResult = takeOidcAuthorizationResult();
+        void useOidcStore.getState().refresh().finally(() => {
+            if (authorizationResult) useOidcStore.getState().reportAuthorizationResult(authorizationResult);
+        });
         const interceptor = axios.interceptors.response.use(
             (response) => response,
             (error) => {

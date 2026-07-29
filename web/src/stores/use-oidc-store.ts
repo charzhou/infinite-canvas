@@ -13,6 +13,7 @@ type OidcState = {
     refresh: () => Promise<void>;
     loadModelCatalog: () => Promise<OidcModel[]>;
     connect: (modelIds: string[]) => Promise<void>;
+    reportAuthorizationResult: (result: "failed" | "invalid_scope") => void;
     syncModels: () => Promise<void>;
     disconnect: () => Promise<void>;
     invalidate: () => void;
@@ -70,6 +71,7 @@ export const useOidcStore = create<OidcState>((set, get) => ({
             set({ error: error instanceof Error ? error.message : "OIDC 授权发起失败", loading: false });
         }
     },
+    reportAuthorizationResult: (result) => set({ error: result === "invalid_scope" ? "所选模型未获此 OAuth 客户端允许，请检查 Sub2API OAuth Client 的 allowed_llm_scopes。" : "OIDC 授权失败，请重新选择模型后连接。" }),
     syncModels: async () => {
         set({ loading: true, error: "" });
         try {

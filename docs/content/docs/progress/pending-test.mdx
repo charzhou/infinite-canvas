@@ -48,6 +48,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 - 重启浏览器后会话仍可用；点击断开后浏览器会话清除且上游授权被撤销。
 - OIDC 授权前应显示静态模型目录及文本、图片、视频分类；未选模型时不能发起授权。选择一个或多个模型后，授权 URL 的 scope 仅包含 `openid offline_access` 和所选模型对应的 `llm:*` scope。
 - OIDC 已连接后应只展示本次已授权模型；点击「更换模型」后选择新模型会重新授权，取消、授权失败或返回不匹配 scope 时原有有效模型和连接必须保留。直接提交目录外模型 ID 应被 BFF 拒绝。
+- Provider 返回 `invalid_scope` 时，应回到配置页并提示所选模型未获 OAuth Client 的 `allowed_llm_scopes` 允许；地址栏和页面不应显示 Provider 的原始 `error_description`，原有有效连接仍应保留。
 - Provider 返回失效 token 时，受管理渠道自动移除并提示重新连接。
 - 手动音频渠道仍可生成音频，受管理渠道不显示音频模型。
 - Docker、Render、Knative 回调均路由到 `{PUBLIC_ORIGIN}/api/oidc/callback`；GitHub Pages 不显示受管理渠道控件。
