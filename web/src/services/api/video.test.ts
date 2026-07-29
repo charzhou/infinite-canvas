@@ -18,6 +18,23 @@ it("allows an OIDC xAI video model without a browser API key", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { request_id: "video-request" } });
 
     await expect(createVideoGenerationTask(oidcXaiConfig, "测试视频")).resolves.toMatchObject({ provider: "xai", id: "video-request" });
+    expect(axios.post).toHaveBeenCalledWith(
+        "/api/oidc/proxy/v1/videos/generations",
+        { model: "grok-imagine-video", prompt: "测试视频", duration: 6, size: "1280x720", resolution: "720p", preset: "normal" },
+        { headers: { Authorization: "Bearer ", "Content-Type": "application/json" }, signal: undefined },
+    );
+});
+
+it("uses the Sub2API xAI images field for multiple references", async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: { request_id: "video-request" } });
+    const image = { id: "image-1", name: "ref.png", type: "image/png", dataUrl: "data:image/png;base64,AA==" };
+
+    await createVideoGenerationTask(oidcXaiConfig, "测试视频", [image, { ...image, id: "image-2" }]);
+
+    const payload = vi.mocked(axios.post).mock.lastCall?.[1];
+    expect(payload).toMatchObject({ images: [{ url: image.dataUrl }, { url: image.dataUrl }] });
+    expect(payload).not.toHaveProperty("aspect_ratio");
+    expect(payload).not.toHaveProperty("reference_images");
 });
 
 it("downloads a completed xAI video through the channel content endpoint", async () => {

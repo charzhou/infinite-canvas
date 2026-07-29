@@ -14,7 +14,7 @@
 ## 调用流程
 
 1. 对 `xAI` 视频模型，提交 JSON 到 `POST /v1/videos/generations`。
-2. 请求包含 `model`、`prompt`、`duration`、`aspect_ratio` 和 `resolution`；有首帧图时使用 `image`，多张参考图时使用 `reference_images`。
+2. Sub2API 的 xAI 视频请求包含 `model`、`prompt`、`duration`、`size`、`resolution` 和 `preset`；有首帧图时使用 `image`，多张参考图时使用 `images`。
 3. 从响应取得 `request_id`，每 5 秒查询 `GET /v1/videos/{request_id}`。
 4. 返回状态为 `done` 时读取 `video.url`，并沿用现有逻辑下载后保存到浏览器本地媒体存储。
 5. `failed` 和 `expired` 作为失败状态返回；其他状态继续轮询。
@@ -22,7 +22,7 @@
 ## 参数与边界
 
 - 时长收敛到 xAI 支持的 1 到 15 秒。
-- 比例使用已有比例设置，映射到 xAI 的 `aspect_ratio`。
+- 比例使用已有尺寸设置，映射到 Sub2API 的 `size`。
 - 分辨率使用已有清晰度设置，映射到 xAI 的 `resolution`；`1080p` 是否可用由 xAI 模型和图生视频模式决定，服务端拒绝时显示原始错误。
 - 视频和音频参考资产不传给 xAI，仍要求使用 Seedance；xAI 仅支持文本、首帧图和参考图生成。
 

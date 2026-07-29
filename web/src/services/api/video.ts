@@ -186,14 +186,15 @@ async function pollOpenAIVideoTask(config: AiConfig, task: VideoGenerationTask, 
 
 async function createXaiVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
     const imageUrls = await Promise.all(references.map((image) => imageToDataUrl(image)));
-    const aspectRatio = xaiAspectRatio(config.size);
+    const size = normalizeVideoSize(config.size);
     const payload = {
         model: modelOptionName(model),
         prompt,
         duration: normalizeXaiVideoSeconds(config.videoSeconds),
+        ...(size ? { size } : {}),
         resolution: normalizeVideoResolution(config.vquality),
-        ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
-        ...(imageUrls.length === 1 ? { image: { url: imageUrls[0] } } : imageUrls.length > 1 ? { reference_images: imageUrls.map((url) => ({ url })) } : {}),
+        preset: "normal",
+        ...(imageUrls.length === 1 ? { image: { url: imageUrls[0] } } : imageUrls.length > 1 ? { images: imageUrls.map((url) => ({ url })) } : {}),
     };
     try {
         const created = (await axios.post<XaiVideoTask>(aiApiUrl(config, "/videos/generations"), payload, { headers: aiHeaders(config, "application/json"), signal: options?.signal })).data;
@@ -352,31 +353,6 @@ function normalizeVideoSeconds(value: string) {
 
 function normalizeXaiVideoSeconds(value: string) {
     return Math.max(1, Math.min(15, Math.floor(Number(value) || 6)));
-}
-
-function xaiAspectRatio(value: string) {
-    if (value === "auto") return undefined;
-    const ratioParts = value.split(":").map(Number);
-    if (ratioParts.length === 2 && ratioParts[0] && ratioParts[1]) return xaiAspectRatioFromDimensions(ratioParts[0], ratioParts[1]);
-    const normalized = normalizeVideoSize(value);
-    if (!normalized) return undefined;
-    const [width, height] = normalized.split("x").map(Number);
-    if (!width || !height) return undefined;
-    return xaiAspectRatioFromDimensions(width, height);
-}
-
-function xaiAspectRatioFromDimensions(width: number, height: number) {
-    const ratio = width / height;
-    const supported = [
-        [16, 9],
-        [9, 16],
-        [1, 1],
-        [4, 3],
-        [3, 4],
-        [3, 2],
-        [2, 3],
-    ] as const;
-    return supported.reduce((best, [x, y]) => (Math.abs(ratio - x / y) < Math.abs(ratio - best[0] / best[1]) ? [x, y] : best), supported[0]).join(":");
 }
 
 function normalizeVideoSize(value: string) {
