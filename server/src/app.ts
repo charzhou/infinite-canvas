@@ -4,7 +4,7 @@ import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 import express, { type Express, type Request, type Response } from "express";
 
 import { openCookie, sealCookie, sessionCookie, transactionCookie } from "./cookies.js";
-import { parseScopes, type OidcConfig } from "./config.js";
+import { modelCatalog, parseScopes, scopeModels, scopesForModelIds, type OidcConfig } from "./config.js";
 import { discoveryFor, exchangeCode, OidcTokenError, refreshAccessToken, revokeRefreshToken, verifyIdToken, type Discovery, type TokenResponse } from "./oidc.js";
 import { proxyGatewayRequest, proxyPrefix, type ProxyDependencies } from "./proxy.js";
 
@@ -12,6 +12,7 @@ export type OidcTransaction = {
     state: string;
     nonce: string;
     returnTo: string;
+    scopes: string[];
 };
 
 export type OidcSessionPayload = {
@@ -78,7 +79,12 @@ function redirectOidcResult(response: Response, returnTo: string | undefined, re
 
 function transactionFor(request: Request, config: OidcConfig) {
     const transaction = openCookie<OidcTransaction>(cookieValue(request, transactionCookie.name), config.sessionKey);
-    if (!transaction || typeof transaction.state !== "string" || typeof transaction.nonce !== "string" || typeof transaction.returnTo !== "string") return null;
+    if (!transaction || typeof transaction.state !== "string" || typeof transaction.nonce !== "string" || typeof transaction.returnTo !== "string" || !Array.isArray(transaction.scopes) || !transaction.scopes.every((scope) => typeof scope === "string")) return null;
+    try {
+        if (!sameScopes(parseScopes(transaction.scopes.join(" ")), transaction.scopes)) return null;
+    } catch {
+        return null;
+    }
     return transaction;
 }
 
@@ -90,6 +96,11 @@ export function sessionFor(request: Request, config: OidcConfig) {
         typeof session.subject !== "string" || session.issuer !== config.issuer.origin || !Array.isArray(session.scopes) ||
         !session.scopes.every((scope) => typeof scope === "string") || session.refreshTokenExpiresAt <= Date.now()
     ) return null;
+    try {
+        if (!sameScopes(parseScopes(session.scopes.join(" ")), session.scopes)) return null;
+    } catch {
+        return null;
+    }
     return session;
 }
 
@@ -191,7 +202,7 @@ function authorizationUrl(config: OidcConfig, discovery: Discovery, transaction:
         response_type: "code",
         client_id: config.clientId,
         redirect_uri: new URL("/api/oidc/callback", config.publicOrigin).toString(),
-        scope: config.scopes.join(" "),
+        scope: transaction.scopes.join(" "),
         state: transaction.state,
         nonce: transaction.nonce,
     }).toString();
@@ -205,7 +216,7 @@ export function createApp(config: OidcConfig | null, dependencies: OidcAppDepend
     app.use(proxyPrefix, (request, response, next) => {
         if (!config) return response.status(404).json({ code: "oidc_disabled" });
         const session = sessionFor(request, config);
-        if (!session || !sameScopes(session.scopes, config.scopes)) return invalidSession(response, config);
+        if (!session) return invalidSession(response, config);
         void refreshedSession(config, response, session, oidc).then((currentSession) => {
             if (!currentSession) return invalidSession(response, config);
             return proxyGatewayRequest(config, request, response, currentSession, dependencies.proxy);
@@ -219,13 +230,25 @@ export function createApp(config: OidcConfig | null, dependencies: OidcAppDepend
         response.json({ enabled: Boolean(config), providerName: config?.providerName || "" });
     });
 
+    app.get("/api/oidc/model-catalog", (_request, response) => {
+        if (!config) return response.status(404).json({ code: "oidc_disabled" });
+        return response.json(modelCatalog());
+    });
+
     app.post("/api/oidc/authorize", async (request, response) => {
         if (!config) return response.status(404).json({ code: "oidc_disabled" });
+        let scopes: string[];
+        try {
+            scopes = scopesForModelIds(request.body?.modelIds);
+        } catch {
+            return response.status(400).json({ code: "oidc_invalid_model_selection" });
+        }
         try {
             const transaction: OidcTransaction = {
                 state: randomBytes(24).toString("base64url"),
                 nonce: randomBytes(24).toString("base64url"),
                 returnTo: safeReturnTo(request.body?.returnTo, config),
+                scopes,
             };
             const discovery = await oidc.discoveryFor(config);
             response.cookie(transactionCookie.name, sealCookie(transaction, config.sessionKey), transactionCookie.options(config));
@@ -248,13 +271,12 @@ export function createApp(config: OidcConfig | null, dependencies: OidcAppDepend
             const discovery = await oidc.discoveryFor(config);
             const tokens = await oidc.exchangeCode(config, discovery, code);
             const scopes = parseScopes(tokens.scope);
-            if (!sameScopes(scopes, config.scopes)) throw new Error("OIDC scope 不匹配");
+            if (!sameScopes(scopes, transaction.scopes)) throw new Error("OIDC scope 不匹配");
             const subject = await oidc.verifyIdToken(config, discovery, tokens.idToken, transaction.nonce);
             const session = newSession(config, tokens, subject, scopes);
             storeSession(response, config, session);
             return redirectOidcResult(response, transaction.returnTo, "connected", config);
         } catch {
-            clearSession(response, config);
             return redirectOidcResult(response, transaction.returnTo, "failed", config);
         }
     });
@@ -263,18 +285,14 @@ export function createApp(config: OidcConfig | null, dependencies: OidcAppDepend
         if (!config) return response.json({ connected: false, providerName: "", approvedScopes: [] });
         const session = sessionFor(request, config);
         if (!session) return invalidSession(response, config);
-        if (!sameScopes(session.scopes, config.scopes)) {
-            clearSession(response, config);
-            return response.json({ connected: false, providerName: config.providerName, approvedScopes: [] });
-        }
         return response.json({ connected: true, providerName: config.providerName, approvedScopes: session.scopes });
     });
 
     app.get("/api/oidc/models", (request, response) => {
         if (!config) return response.status(404).json({ code: "oidc_disabled" });
         const session = sessionFor(request, config);
-        if (!session || !sameScopes(session.scopes, config.scopes)) return invalidSession(response, config);
-        return response.json(config.models);
+        if (!session) return invalidSession(response, config);
+        return response.json(scopeModels(session.scopes));
     });
 
     app.delete("/api/oidc/session", async (request, response) => {

@@ -5,15 +5,9 @@ description: 使用 Render 部署无限画布
 
 # Render 部署
 
-Render 使用仓库根目录的 `render.yaml` 构建 Docker 镜像。OIDC 相关变量在 Render 控制台中以 Secret 填写：`OIDC_ISSUER`、`OIDC_GATEWAY_BASE_URL`、`OIDC_CLIENT_ID`、`OIDC_CLIENT_SECRET`、`OIDC_SESSION_KEY`、`OIDC_PROVIDER_NAME`、`OIDC_REQUESTED_SCOPES` 和 `PUBLIC_ORIGIN`；`OIDC_PROXY_TIMEOUT_MS` 固定为 `600000`（10 分钟）。
+Render 使用仓库根目录的 `render.yaml` 构建 Docker 镜像。OIDC 相关变量在 Render 控制台中以 Secret 填写：`OIDC_ISSUER`、`OIDC_GATEWAY_BASE_URL`、`OIDC_CLIENT_ID`、`OIDC_CLIENT_SECRET`、`OIDC_SESSION_KEY`、`OIDC_PROVIDER_NAME` 和 `PUBLIC_ORIGIN`；`OIDC_PROXY_TIMEOUT_MS` 固定为 `600000`（10 分钟）。
 
-`OIDC_ISSUER` 仍然是规范 Issuer，例如 `https://ai.nekotech.us`；`OIDC_GATEWAY_BASE_URL` 是可选的受限网关入口，未配置时默认回退到 Issuer。如果你需要通过 CDN 加速算力请求，可以把它配置为 `https://sub2api.tegical.com`。如果在其前面挂 CDN 或反向代理，它必须透传 `Authorization: Bearer`、streaming 响应、`Range` 和二进制媒体内容，默认不要缓存已认证 API 响应。`PUBLIC_ORIGIN` 使用 Render 分配或绑定的 HTTPS 域名，并在 Provider 中注册精确回调 `{PUBLIC_ORIGIN}/api/oidc/callback`。当前 scope 必须为：
-
-```text
-openid offline_access llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra
-```
-
-修改 scope 会让旧浏览器会话失效并要求重新连接。没有这些变量时，Render 部署仍可作为手动 API Key 渠道使用。
+`OIDC_ISSUER` 仍然是规范 Issuer，例如 `https://ai.nekotech.us`；`OIDC_GATEWAY_BASE_URL` 是可选的受限网关入口，未配置时默认回退到 Issuer。如果你需要通过 CDN 加速算力请求，可以把它配置为 `https://sub2api.tegical.com`。如果在其前面挂 CDN 或反向代理，它必须透传 `Authorization: Bearer`、streaming 响应、`Range` 和二进制媒体内容，默认不要缓存已认证 API 响应。`PUBLIC_ORIGIN` 使用 Render 分配或绑定的 HTTPS 域名，并在 Provider 中注册精确回调 `{PUBLIC_ORIGIN}/api/oidc/callback`。用户在连接前选择模型，BFF 仅请求所选模型的 scope；Sub2API OAuth Client 仍会拒绝其 `allowed_llm_scopes` 以外的模型。更换模型会重新授权。没有这些变量时，Render 部署仍可作为手动 API Key 渠道使用。
 
 点击下面链接即可部署到 Render：
 

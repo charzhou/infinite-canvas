@@ -41,11 +41,10 @@ OIDC_CLIENT_SECRET=...
 OIDC_SESSION_KEY=...
 OIDC_PROXY_TIMEOUT_MS=600000
 OIDC_PROVIDER_NAME=Provider 名称
-OIDC_REQUESTED_SCOPES=openid offline_access llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra
 PUBLIC_ORIGIN=https://canvas.example.com
 ```
 
-`OIDC_ISSUER` 仍然是 Provider 的规范 Issuer，用于发现、校验和令牌交换；`OIDC_GATEWAY_BASE_URL` 是可选的受限网关入口，未配置时默认回退到 `OIDC_ISSUER`。当你要走 CDN 加速时，可以保留 `OIDC_ISSUER=https://ai.nekotech.us`，再把 `OIDC_GATEWAY_BASE_URL` 配成 `https://sub2api.tegical.com`。如果在其前面挂 CDN 或反向代理，它必须透传 `Authorization: Bearer`、streaming 响应、`Range` 和二进制媒体内容，默认不要缓存已认证 API 响应。`PUBLIC_ORIGIN` 必须是 HTTPS 的公开站点地址，并在 Provider 注册精确回调地址：`{PUBLIC_ORIGIN}/api/oidc/callback`。`OIDC_SESSION_KEY` 必须是 base64url 编码的 32 字节随机密钥。`OIDC_PROXY_TIMEOUT_MS` 统一为 `600000`（10 分钟），用于受限上游代理请求。修改 scope 列表会使已有浏览器会话重新授权。
+`OIDC_ISSUER` 仍然是 Provider 的规范 Issuer，用于发现、校验和令牌交换；`OIDC_GATEWAY_BASE_URL` 是可选的受限网关入口，未配置时默认回退到 `OIDC_ISSUER`。当你要走 CDN 加速时，可以保留 `OIDC_ISSUER=https://ai.nekotech.us`，再把 `OIDC_GATEWAY_BASE_URL` 配成 `https://sub2api.tegical.com`。如果在其前面挂 CDN 或反向代理，它必须透传 `Authorization: Bearer`、streaming 响应、`Range` 和二进制媒体内容，默认不要缓存已认证 API 响应。`PUBLIC_ORIGIN` 必须是 HTTPS 的公开站点地址，并在 Provider 注册精确回调地址：`{PUBLIC_ORIGIN}/api/oidc/callback`。`OIDC_SESSION_KEY` 必须是 base64url 编码的 32 字节随机密钥。`OIDC_PROXY_TIMEOUT_MS` 统一为 `600000`（10 分钟）。用户在连接前从应用内置目录选择模型，BFF 只为所选模型请求 scope；Sub2API OAuth Client 的 `allowed_llm_scopes` 必须包含相同模型 scope。更换模型需要重新授权。
 
 ## 文档站镜像
 

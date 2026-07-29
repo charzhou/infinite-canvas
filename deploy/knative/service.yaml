@@ -32,8 +32,6 @@ spec:
               valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_SESSION_KEY, optional: true } }
             - name: OIDC_PROVIDER_NAME
               valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_PROVIDER_NAME, optional: true } }
-            - name: OIDC_REQUESTED_SCOPES
-              valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: OIDC_REQUESTED_SCOPES, optional: true } }
             - name: PUBLIC_ORIGIN
               valueFrom: { secretKeyRef: { name: infinite-canvas-oidc, key: PUBLIC_ORIGIN, optional: true } }
             - name: OIDC_PROXY_TIMEOUT_MS

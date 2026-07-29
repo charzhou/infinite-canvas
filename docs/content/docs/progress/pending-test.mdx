@@ -36,7 +36,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 # OIDC 算力渠道
 
 - 使用账户授权和仅 API Key 批准两种 Provider 路径完成浏览器授权。
-- 分别使用 `gpt-5.6-terra` 文本、`gpt-image-2` 与两个 Grok 生图别名、两个 Grok 视频别名生成内容。
+- 分别使用 `gpt-5.6-terra` 文本、`gpt-image-2` 与两个 Grok 生图别名、两个 Grok 视频别名、`seedance-2-0` 和 `seedance-2-0-mini` 生成内容。
 - 在画布中选择受管理的 Grok 视频模型生成视频时，不应要求填写浏览器 API Key。
 - Grok 视频生成请求应经由受限代理到达 `/v1/videos/generations`，不返回 `oidc_proxy_not_found`。
 - Provider 返回 `status: "completed"` 时，应立即经 `/v1/videos/{request_id}/content` 下载并结束轮询，不依赖短时有效的 `video.url`。
@@ -46,6 +46,8 @@ description: 当前版本已实现但仍需人工验证的变更项
 - Provider 的授权和刷新响应返回 `refresh_token_expires_at` 后，浏览器会话应以该绝对时间失效；轮换 refresh token 不得将本地会话延长到该时间之外。
 - 受管理渠道的上游请求和视频内容下载在 10 分钟内可持续完成；超过 `OIDC_PROXY_TIMEOUT_MS=600000` 时应停止并返回网关错误。
 - 重启浏览器后会话仍可用；点击断开后浏览器会话清除且上游授权被撤销。
-- Provider 返回失效 token 时，受管理渠道自动移除并提示重新连接；修改 scope 后旧会话要求重新授权。
+- OIDC 授权前应显示静态模型目录及文本、图片、视频分类；未选模型时不能发起授权。选择一个或多个模型后，授权 URL 的 scope 仅包含 `openid offline_access` 和所选模型对应的 `llm:*` scope。
+- OIDC 已连接后应只展示本次已授权模型；点击「更换模型」后选择新模型会重新授权，取消、授权失败或返回不匹配 scope 时原有有效模型和连接必须保留。直接提交目录外模型 ID 应被 BFF 拒绝。
+- Provider 返回失效 token 时，受管理渠道自动移除并提示重新连接。
 - 手动音频渠道仍可生成音频，受管理渠道不显示音频模型。
 - Docker、Render、Knative 回调均路由到 `{PUBLIC_ORIGIN}/api/oidc/callback`；GitHub Pages 不显示受管理渠道控件。

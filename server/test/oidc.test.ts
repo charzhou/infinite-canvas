@@ -16,8 +16,11 @@ const scopes = [
     "llm:grok:grok-imagine-video",
     "llm:grok:grok-imagine-video-1.5",
     "llm:openai:gpt-image-2",
+    "llm:openai:seedance-2-0",
+    "llm:openai:seedance-2-0-mini",
     "llm:openai:gpt-5.6-terra",
 ].join(" ");
+const modelIds = ["grok/grok-imagine-image", "grok/grok-imagine-image-quality", "grok/grok-imagine-video", "grok/grok-imagine-video-1.5", "openai/gpt-image-2", "openai/seedance-2-0", "openai/seedance-2-0-mini", "openai/gpt-5.6-terra"];
 const refreshTokenExpiresAt = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
 
 const config = loadOidcConfig({
@@ -26,7 +29,6 @@ const config = loadOidcConfig({
     OIDC_CLIENT_SECRET: "client-secret",
     OIDC_SESSION_KEY: Buffer.alloc(32, 7).toString("base64url"),
     OIDC_PROVIDER_NAME: "My Compute",
-    OIDC_REQUESTED_SCOPES: scopes,
     PUBLIC_ORIGIN: "https://canvas.example",
 });
 
@@ -67,18 +69,19 @@ function createTestApp() {
 
 test("authorize stores state and nonce only in an encrypted transaction cookie", async () => {
     const { app } = createTestApp();
-    const response = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config" });
+    const response = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config", modelIds });
 
     assert.equal(response.status, 200);
     assert.match(response.body.authorizationUrl, /^https:\/\/issuer\.example\/oauth\/authorize\?/);
     assert.match(response.headers["set-cookie"].join(";"), /HttpOnly/);
     assert.doesNotMatch(response.headers["set-cookie"].join(";"), /derived-token/);
     assert.equal(parseCookie(cookiePair(response))[transactionCookie.name]?.includes("."), true);
+    assert.deepEqual(new URL(response.body.authorizationUrl).searchParams.get("scope")?.split(" "), scopes.split(" "));
 });
 
 test("callback rejects a mismatched state without exchanging the authorization code", async () => {
     const { app, getExchangeCalls } = createTestApp();
-    const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config" });
+    const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config", modelIds });
     const response = await request(app).get("/api/oidc/callback?code=code-1&state=wrong").set("Cookie", cookiePair(authorization));
 
     assert.equal(response.status, 302);
@@ -87,7 +90,7 @@ test("callback rejects a mismatched state without exchanging the authorization c
 
 test("authorization persists the provider refresh-family expiry", async () => {
     const { app } = createTestApp();
-    const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config" });
+    const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config", modelIds });
     const transaction = parseCookie(cookiePair(authorization))[transactionCookie.name];
     const payload = transaction ? (await import("../src/cookies.js")).openCookie<{ state: string }>(transaction, config.sessionKey) : null;
     if (!payload) throw new Error("无法读取测试事务 Cookie");
@@ -100,7 +103,7 @@ test("authorization persists the provider refresh-family expiry", async () => {
 
 test("session endpoints return capability metadata but never the derived token", async () => {
     const { app } = createTestApp();
-    const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config" });
+    const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config", modelIds });
     const transaction = parseCookie(cookiePair(authorization))[transactionCookie.name];
     const payload = transaction ? (await import("../src/cookies.js")).openCookie<{ state: string }>(transaction, config.sessionKey) : null;
     if (!payload) throw new Error("无法读取测试事务 Cookie");
@@ -117,7 +120,7 @@ test("session endpoints return capability metadata but never the derived token",
 
 test("session endpoints reject a refresh family past its absolute expiry", async () => {
     const { app } = createTestApp();
-    const cookie = `${sessionCookie.name}=${sealCookie({ accessToken: "expired-derived-token", refreshToken: "expired-refresh-token", accessTokenExpiresAt: Date.now(), refreshTokenExpiresAt: Date.now() - 1, subject: "subject-1", issuer: config.issuer.origin, scopes: config.scopes, createdAt: new Date().toISOString() }, config.sessionKey)}`;
+    const cookie = `${sessionCookie.name}=${sealCookie({ accessToken: "expired-derived-token", refreshToken: "expired-refresh-token", accessTokenExpiresAt: Date.now(), refreshTokenExpiresAt: Date.now() - 1, subject: "subject-1", issuer: config.issuer.origin, scopes: scopes.split(" "), createdAt: new Date().toISOString() }, config.sessionKey)}`;
 
     const response = await request(app).get("/api/oidc/session").set("Cookie", cookie);
 
@@ -128,7 +131,7 @@ test("session endpoints reject a refresh family past its absolute expiry", async
 
 test("disconnect always clears the browser session after requesting upstream revocation", async () => {
     const { app, getRevokeCalls } = createTestApp();
-    const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config" });
+    const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config", modelIds });
     const transaction = parseCookie(cookiePair(authorization))[transactionCookie.name];
     const payload = transaction ? (await import("../src/cookies.js")).openCookie<{ state: string }>(transaction, config.sessionKey) : null;
     if (!payload) throw new Error("无法读取测试事务 Cookie");
@@ -139,4 +142,33 @@ test("disconnect always clears the browser session after requesting upstream rev
     assert.equal(response.status, 204);
     assert.equal(getRevokeCalls(), 1);
     assert.match(response.headers["set-cookie"].join(";"), /oidc_session=;/);
+});
+
+test("model catalog is public but authorization rejects unknown model IDs", async () => {
+    const { app } = createTestApp();
+
+    const catalog = await request(app).get("/api/oidc/model-catalog");
+    const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config", modelIds: ["not-in-catalog"] });
+
+    assert.equal(catalog.status, 200);
+    assert.deepEqual(catalog.body.find((model: { id: string }) => model.id === "grok/grok-imagine-video"), { id: "grok/grok-imagine-video", platform: "grok", name: "grok-imagine-video", apiFormat: "xai", capability: "video" });
+    assert.equal(authorization.status, 400);
+});
+
+test("callback retains an existing session when a replacement authorization fails", async () => {
+    const { app } = createTestApp();
+    const existingSession = `${sessionCookie.name}=${sealCookie({ accessToken: "existing-token", refreshToken: "existing-refresh-token", accessTokenExpiresAt: Date.now() + 900_000, refreshTokenExpiresAt: Date.now() + 3_600_000, subject: "subject-1", issuer: config.issuer.origin, scopes: ["openid", "offline_access", "llm:openai:gpt-image-2"], createdAt: new Date().toISOString() }, config.sessionKey)}`;
+    const authorization = await request(app).post("/api/oidc/authorize").send({ returnTo: "/config", modelIds: ["grok/grok-imagine-video"] });
+    const transaction = parseCookie(cookiePair(authorization))[transactionCookie.name];
+    const payload = transaction ? (await import("../src/cookies.js")).openCookie<{ state: string }>(transaction, config.sessionKey) : null;
+    if (!payload) throw new Error("无法读取测试事务 Cookie");
+
+    const callback = await request(app)
+        .get(`/api/oidc/callback?code=code-1&state=${encodeURIComponent(payload.state)}`)
+        .set("Cookie", `${existingSession}; ${cookiePair(authorization)}`);
+
+    assert.equal(callback.status, 302);
+    assert.match(callback.headers.location, /oidc=failed/);
+    assert.equal(callback.headers["set-cookie"]?.some((value) => value.startsWith(`${sessionCookie.name}=`)), false);
+    assert.equal((await request(app).get("/api/oidc/models").set("Cookie", existingSession)).body[0]?.name, "gpt-image-2");
 });

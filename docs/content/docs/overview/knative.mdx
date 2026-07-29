@@ -21,7 +21,7 @@ kubectl -n default apply -f /private/path/infinite-canvas-oidc.yaml
 openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\\n'
 ```
 
-`OIDC_ISSUER` 仍然是规范 Issuer，例如 `https://ai.nekotech.us`。`OIDC_GATEWAY_BASE_URL` 是可选项，默认与 Issuer 相同；如果希望算力请求走 CDN 加速域名，可以填 `https://sub2api.tegical.com`。如果在其前面挂 CDN 或反向代理，它必须透传 `Authorization: Bearer`、streaming 响应、`Range` 和二进制媒体内容，默认不要缓存已认证 API 响应。`PUBLIC_ORIGIN` 必须是 Knative 对外暴露的 HTTPS Origin，例如 `https://canvas.example.com`。在 OIDC Provider 中注册精确回调地址：
+`OIDC_ISSUER` 仍然是规范 Issuer，例如 `https://ai.nekotech.us`。`OIDC_GATEWAY_BASE_URL` 是可选项，默认与 Issuer 相同；如果希望算力请求走 CDN 加速域名，可以填 `https://sub2api.tegical.com`。如果在其前面挂 CDN 或反向代理，它必须透传 `Authorization: Bearer`、streaming 响应、`Range` 和二进制媒体内容，默认不要缓存已认证 API 响应。模型 scope 不再写入 Secret，用户在连接前选择应用目录中的模型；Sub2API OAuth Client 的 `allowed_llm_scopes` 仍是最终授权边界。`PUBLIC_ORIGIN` 必须是 Knative 对外暴露的 HTTPS Origin，例如 `https://canvas.example.com`。在 OIDC Provider 中注册精确回调地址：
 
 ```text
 https://canvas.example.com/api/oidc/callback

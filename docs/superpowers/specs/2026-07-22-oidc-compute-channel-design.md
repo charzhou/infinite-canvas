@@ -9,7 +9,7 @@
 ## 非目标
 
 - 不增加无限画布用户注册、登录、用户表、跨设备同步或额度转售能力。
-- 不移除音频生成或其他现有功能。当前 OIDC scope 未包含音频模型，因此音频仅继续使用用户手填的渠道，直到部署者为 OAuth 客户端增加音频 scope。
+- 不移除音频生成或其他现有功能。当前静态模型目录未包含音频模型，因此音频仅继续使用用户手填的渠道，直到目录和 OAuth 客户端均增加音频模型。
 - 不将 OAuth `client_secret`、派生 access token 或 ID Token 暴露给浏览器 JavaScript、URL、日志或分析服务。
 - 不将 BFF 做成任意 URL 的通用转发服务，也不代理上游的 `/oauth/*`、`/api/v1/*` 或管理接口。
 - 首期不支持 Vercel Functions；GitHub Pages 继续是无 OIDC 的纯静态预览部署。
@@ -26,37 +26,38 @@
 - `OIDC_SESSION_KEY`：base64url 编码的 32 字节高熵会话加密密钥。
 - `OIDC_PROVIDER_NAME`：前端显示名称；未设置时显示为“OIDC Provider”。
 - `PUBLIC_ORIGIN`：当前部署的公开 HTTPS origin，用于生成并校验精确回调 URL。
-- `OIDC_REQUESTED_SCOPES`：空格分隔的精确 OAuth scope。必须含唯一的 `openid` 和 `offline_access`，可选 `profile`、`email`，其余值必须是管理员为该 `client_id` 登记且被当前渠道映射支持的 `llm:<platform>:<model-alias>`。
 
-当前部署配置的 scope 为：
+模型目录由 BFF 在 `server/src/config.ts` 静态维护，不通过环境变量或上游 Discovery 获取。每项都有稳定 ID、平台、调用格式和默认能力分类。当前目录包含：
 
-```text
-openid offline_access llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra
-```
+- Grok 的 `grok-imagine-image`、`grok-imagine-image-quality`：图片。
+- Grok 的 `grok-imagine-video`、`grok-imagine-video-1.5`：视频。
+- OpenAI 的 `gpt-image-2`：图片；`seedance-2-0`、`seedance-2-0-mini`：视频；`gpt-5.6-terra`：文本。
 
-其中 Grok 的两个 imagine image alias 初始归类为图片，两个 imagine video alias 初始归类为视频；`gpt-image-2` 初始归类为图片，`gpt-5.6-terra` 初始归类为文本。不存在音频模型。用户仍可调整已授权模型的能力分类，但不能绕过 scope 增加模型。
+不存在音频模型。目录 ID 只在 BFF 内映射到精确 `llm:<platform>:<model-alias>` scope，浏览器不能提交任意 scope。Sub2API OAuth Client 的 `allowed_llm_scopes` 仍是上游最终授权边界。
 
-只有上述 OIDC 配置完整且 scope 格式合法时，BFF 才报告功能可用，前端才显示连接入口。名称、功能启用状态和连接状态可公开给前端；issuer、client ID、scope 配置与所有密钥均不得返回。Discovery 文档不作为 scope 来源，因为上游不会公开客户端专属的模型 scope。
+只有上述 OIDC 配置完整时，BFF 才报告功能可用，前端才显示连接入口。名称、功能启用状态、模型目录和连接状态可公开给前端；issuer、client ID、scope 配置与所有密钥均不得返回。Discovery 文档不作为模型或 scope 来源，因为上游不会公开客户端专属的模型 scope。
 
 ## 授权与会话
 
-1. 浏览器点击“连接 {Provider 名称}”。
-2. BFF 读取 Discovery 文档，生成 `state` 与 nonce，并把它们及回调后的相对本地返回路径加密写入 10 分钟有效的 `oidc_transaction` Cookie。
-3. BFF 将浏览器重定向到上游 `authorization_endpoint`，使用 `response_type=code` 与 `OIDC_REQUESTED_SCOPES` 的精确 scope。
-4. 上游完成登录、父 Key 选择或拒绝后，回调 BFF 的注册 URL。
-5. BFF 校验 `state`，使用 HTTP Basic 认证兑换 code，并通过 Discovery 中的 JWKS 校验 ID Token 的 `RS256`、issuer、audience 与 nonce。
-6. BFF 对照配置 scope 验证 token 响应中的规范化 `scope`，加密写入 `oidc_session` Cookie。其内容仅包含派生 access token、轮换 refresh token、两个令牌的到期时间、`sub`、issuer、已批准 scope 和必要的连接时间元数据；随后跳转回渠道设置。
+1. 浏览器点击“连接 {Provider 名称}”，BFF 通过 `GET /api/oidc/model-catalog` 提供可选择的静态目录。
+2. 用户选择一个或多个目录 ID，前端将 ID 提交给 `POST /api/oidc/authorize`。
+3. BFF 校验所有 ID，并仅从目录映射 `openid offline_access` 加所选模型的精确 `llm:*` scope；随后读取 Discovery 文档，生成 `state` 与 nonce，并把它们、scope 和回调后的相对本地返回路径加密写入 10 分钟有效的 `oidc_transaction` Cookie。
+4. BFF 将浏览器重定向到上游 `authorization_endpoint`，使用 `response_type=code` 与事务中保存的精确 scope。
+5. 上游完成登录、父 Key 选择或拒绝后，回调 BFF 的注册 URL。
+6. BFF 校验 `state`，使用 HTTP Basic 认证兑换 code，并通过 Discovery 中的 JWKS 校验 ID Token 的 `RS256`、issuer、audience 与 nonce。
+7. BFF 验证 token 响应中的规范化 `scope` 与事务 scope 完全一致，再加密写入 `oidc_session` Cookie。其内容仅包含派生 access token、轮换 refresh token、两个令牌的到期时间、`sub`、issuer、已批准 scope 和必要的连接时间元数据；随后跳转回渠道设置。
 
 两个 Cookie 都使用 `HttpOnly`、`SameSite=Lax`、`Path=/`；生产环境额外使用 `Secure`。Cookie 内容采用 AES-256-GCM 加密与认证，序列化使用 base64url；BFF 必须拒绝解密失败、过期或超出浏览器 Cookie 限制的值。access token 为 15 分钟有效，BFF 在代理前于其剩余一分钟内使用 refresh token 换取新 access token、ID Token 和 refresh token，并立刻以新加密 Cookie 替换旧值；每次 token 响应均须包含并持久化 `refresh_token_expires_at`（UTC Unix 秒），作为 refresh family 的权威绝对到期时间。关闭并重新打开浏览器后会话仍有效，但到达该时间、清除 Cookie、主动断开或上游返回 `invalid_grant` 后必须重新授权。
 
-不使用 Redis、数据库或无限画布用户账户。会话只绑定当前浏览器配置，不能跨浏览器或设备迁移。部署者变更 `OIDC_REQUESTED_SCOPES` 后，已有会话的批准 scope 不再与当前配置匹配时，BFF 必须要求重新授权。
+不使用 Redis、数据库或无限画布用户账户。会话只绑定当前浏览器配置，不能跨浏览器或设备迁移。用户要更换模型时，必须重新选择目录项并重新授权；授权失败或取消时，原有有效会话保持不变。目录修改仅影响新的授权，现有会话继续按其已批准 scope 使用模型。
 
 ## BFF 接口与代理边界
 
 同域 BFF 提供以下接口：
 
 - `GET /api/oidc/config`：返回已启用状态与 Provider 显示名称。
-- `POST /api/oidc/authorize`：建立授权事务并返回授权 URL；前端用顶层页面跳转到该 URL。
+- `GET /api/oidc/model-catalog`：返回静态模型目录的 ID、名称、平台、调用格式和默认能力分类，不返回内部 scope。
+- `POST /api/oidc/authorize`：接收目录 `modelIds`，建立带精确 scope 的授权事务并返回授权 URL；前端用顶层页面跳转到该 URL。
 - `GET /api/oidc/callback`：处理授权回调，不向前端暴露 code 或 token。
 - `GET /api/oidc/session`：返回当前连接状态、Provider 名称、批准 scope 及可用于界面显示的元数据。
 - `GET /api/oidc/models`：返回当前会话允许的模型、平台和调用格式；模型清单以批准 scope 为上限，并可结合上游受限模型列表刷新。
@@ -77,25 +78,27 @@ openid offline_access llm:grok:grok-imagine-image llm:grok:grok-imagine-image-qu
 
 - 未连接：显示“连接 {Provider 名称}”。
 - 连接中：禁用重复操作。
-- 已连接：显示“{Provider 名称}”、模型数量、“同步模型”与“断开”。
+- 已连接：显示“{Provider 名称}”、模型数量、“更换模型”与“断开”。
 - 失效：显示需重新连接的状态，手填渠道不受影响。
 
-受管理渠道默认名称直接为 `{Provider 名称}`，不附加协议名称。授权后，前端经 BFF 的模型接口创建或更新该渠道模型列表；该接口只返回已批准 scope 对应的 alias。`llm:openai:*` 映射为模型级 OpenAI 格式，`llm:grok:*` 映射为模型级 xAI 格式，调用时优先采用模型级格式而非渠道默认格式。模型继续使用现有编辑器，用户可修改已授权模型的能力分类；OIDC 凭据、平台与模型列表不可编辑。当前列表不产生音频选项，音频工作台继续从手填渠道选择模型。
+受管理渠道默认名称直接为 `{Provider 名称}`，不附加协议名称。授权后，前端经 BFF 的模型接口创建或更新该渠道模型列表；该接口只返回当前会话批准 scope 对应的 alias。`llm:openai:*` 映射为模型级 OpenAI 格式，`llm:grok:*` 映射为模型级 xAI 格式，调用时优先采用模型级格式而非渠道默认格式。模型继续使用现有编辑器，用户可修改已授权模型的能力分类；OIDC 凭据、平台与模型列表不可编辑。当前列表不产生音频选项，音频工作台继续从手填渠道选择模型。
 
 所有文本、图片、视频工作台和画布中的对应生成节点在选择该渠道时，使用 BFF 相对代理地址而不是直连上游。前端请求层必须识别 `authMode: "oidc"`，不要求或伪造 `apiKey`，并保持手填渠道与音频工作台的原有请求行为不变。
 
 ## 错误处理
 
 - 用户取消授权、授权回调包含错误、`state`/nonce 校验失败、Discovery/JWKS 不可用或 token 交换失败：回到渠道设置并显示中文错误，不创建有效连接。
-- 模型同步失败：保留已建立的连接并提示同步失败；用户可再次同步。
+- 模型目录读取失败或未选择模型：不发起授权，提示用户重试或选择模型。
+- 更换模型时用户取消、回调失败或 token scope 与本次选择不一致：保留原有有效连接与模型；用户可重新选择并授权。
+- 已连接后的模型读取失败：保留已建立的连接并提示同步失败；用户可再次打开更换模型。
 - 上游配额、限流、模型不可用和生成失败：透传到现有工作台错误处理，不误报为 OIDC 登录失败。
 - 主动断开：始终清除 BFF 会话和本地受管理渠道连接状态，即使上游撤销调用返回失败或 token 已无效。
 - 未配置 BFF：不显示 OIDC 入口；应用其余功能和纯静态预览继续可用。
 
 ## 验收与测试
 
-服务端测试覆盖 Discovery、授权重定向、state/nonce、ID Token 验证、Cookie 加密与过期、token 交换、撤销、同源校验、代理鉴权重写、路径白名单、SSE、multipart 图片请求和二进制视频响应。
+服务端测试覆盖静态模型目录、目录 ID 到精确 scope 的映射、伪造 ID 拒绝、Discovery、授权重定向、state/nonce、ID Token 验证、Cookie 加密与过期、token 交换、撤销、同源校验、代理鉴权重写、路径白名单、SSE、multipart 图片请求和二进制视频响应。
 
-前端测试覆盖 Provider 名称显示、精确 scope 模型同步、模型级协议解析、模型能力编辑、断开与失效重连，以及手填渠道和音频功能回归。集成验收覆盖当前获授权的文本、图片、视频工作台和画布内对应生成节点，并确认音频仍可通过手填渠道工作。
+前端测试覆盖 Provider 名称显示、模型选择后再授权、当前会话模型读取、模型级协议解析、模型能力编辑、断开与失效重连，以及手填渠道和音频功能回归。集成验收覆盖当前获授权的文本、图片、视频工作台和画布内对应生成节点，并确认音频仍可通过手填渠道工作。
 
 部署验收覆盖 Docker、Render、Knative 的同域回调、页面刷新路由回退与环境变量缺失场景。GitHub Pages 验证 OIDC 入口隐藏且手填渠道保持可用。

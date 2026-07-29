@@ -1,6 +1,6 @@
 import type { ApiCallFormat, ModelCapability } from "@/stores/use-config-store";
 
-export type OidcModel = { name: string; capability: ModelCapability; apiFormat: ApiCallFormat };
+export type OidcModel = { id: string; platform: "openai" | "grok"; name: string; capability: ModelCapability; apiFormat: ApiCallFormat };
 export type OidcSession = { connected: boolean; providerName: string; approvedScopes: string[] };
 export type OidcPublicConfig = { enabled: boolean; providerName: string };
 
@@ -22,8 +22,12 @@ export function getOidcModels() {
     return request<OidcModel[]>("/api/oidc/models");
 }
 
-export async function beginOidcAuthorization(returnTo = "/config") {
-    const data = await request<{ authorizationUrl: string }>("/api/oidc/authorize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ returnTo }) });
+export function getOidcModelCatalog() {
+    return request<OidcModel[]>("/api/oidc/model-catalog");
+}
+
+export async function beginOidcAuthorization(modelIds: string[], returnTo = "/config") {
+    const data = await request<{ authorizationUrl: string }>("/api/oidc/authorize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ returnTo, modelIds }) });
     window.location.assign(data.authorizationUrl);
 }
 

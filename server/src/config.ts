@@ -1,10 +1,12 @@
 export type OidcModel = {
-    scope: string;
+    id: string;
     platform: "openai" | "grok";
     name: string;
     apiFormat: "openai" | "xai";
     capability: "image" | "video" | "text";
 };
+
+type OidcCatalogModel = OidcModel & { scope: string };
 
 export type OidcConfig = {
     issuer: URL;
@@ -15,21 +17,21 @@ export type OidcConfig = {
     providerName: string;
     publicOrigin: URL;
     proxyTimeoutMs: number;
-    scopes: string[];
-    models: OidcModel[];
 };
 
-const approvedModels: OidcModel[] = [
-    { scope: "llm:grok:grok-imagine-image", platform: "grok", name: "grok-imagine-image", apiFormat: "xai", capability: "image" },
-    { scope: "llm:grok:grok-imagine-image-quality", platform: "grok", name: "grok-imagine-image-quality", apiFormat: "xai", capability: "image" },
-    { scope: "llm:grok:grok-imagine-video", platform: "grok", name: "grok-imagine-video", apiFormat: "xai", capability: "video" },
-    { scope: "llm:grok:grok-imagine-video-1.5", platform: "grok", name: "grok-imagine-video-1.5", apiFormat: "xai", capability: "video" },
-    { scope: "llm:openai:gpt-image-2", platform: "openai", name: "gpt-image-2", apiFormat: "openai", capability: "image" },
-    { scope: "llm:openai:gpt-5.6-terra", platform: "openai", name: "gpt-5.6-terra", apiFormat: "openai", capability: "text" },
+const oidcModelCatalog: OidcCatalogModel[] = [
+    { id: "grok/grok-imagine-image", scope: "llm:grok:grok-imagine-image", platform: "grok", name: "grok-imagine-image", apiFormat: "xai", capability: "image" },
+    { id: "grok/grok-imagine-image-quality", scope: "llm:grok:grok-imagine-image-quality", platform: "grok", name: "grok-imagine-image-quality", apiFormat: "xai", capability: "image" },
+    { id: "grok/grok-imagine-video", scope: "llm:grok:grok-imagine-video", platform: "grok", name: "grok-imagine-video", apiFormat: "xai", capability: "video" },
+    { id: "grok/grok-imagine-video-1.5", scope: "llm:grok:grok-imagine-video-1.5", platform: "grok", name: "grok-imagine-video-1.5", apiFormat: "xai", capability: "video" },
+    { id: "openai/gpt-image-2", scope: "llm:openai:gpt-image-2", platform: "openai", name: "gpt-image-2", apiFormat: "openai", capability: "image" },
+    { id: "openai/seedance-2-0", scope: "llm:openai:seedance-2-0", platform: "openai", name: "seedance-2-0", apiFormat: "openai", capability: "video" },
+    { id: "openai/seedance-2-0-mini", scope: "llm:openai:seedance-2-0-mini", platform: "openai", name: "seedance-2-0-mini", apiFormat: "openai", capability: "video" },
+    { id: "openai/gpt-5.6-terra", scope: "llm:openai:gpt-5.6-terra", platform: "openai", name: "gpt-5.6-terra", apiFormat: "openai", capability: "text" },
 ];
 
 const standardScopes = new Set(["openid", "profile", "email", "offline_access"]);
-const approvedScopes = new Set([...standardScopes, ...approvedModels.map((model) => model.scope)]);
+const catalogScopes = new Set(oidcModelCatalog.map((model) => model.scope));
 const defaultProxyTimeoutMs = 600_000;
 
 function normalizedOrigin(value: string, name: string) {
@@ -54,30 +56,40 @@ function proxyTimeout(value: string | undefined) {
 
 export function parseScopes(value: string) {
     const values = value.trim().split(/\s+/).filter(Boolean);
-    if (new Set(values).size !== values.length) throw new Error("OIDC_REQUESTED_SCOPES 不能包含重复 scope");
-    if (!values.includes("openid")) throw new Error("OIDC_REQUESTED_SCOPES 必须包含 openid");
-    if (!values.includes("offline_access")) throw new Error("OIDC_REQUESTED_SCOPES 必须包含 offline_access");
-    const scopes = values;
-    if (scopes.some((scope) => scope === "llm" || !approvedScopes.has(scope))) {
-        throw new Error("OIDC_REQUESTED_SCOPES 包含不受支持的 scope");
+    if (new Set(values).size !== values.length) throw new Error("OIDC scope 不能包含重复值");
+    if (!values.includes("openid") || !values.includes("offline_access")) throw new Error("OIDC scope 必须包含 openid 与 offline_access");
+    if (values.some((scope) => !standardScopes.has(scope) && !catalogScopes.has(scope))) {
+        throw new Error("OIDC scope 包含目录外模型");
     }
-    if (!scopes.some((scope) => scope.startsWith("llm:"))) throw new Error("OIDC_REQUESTED_SCOPES 必须包含至少一个模型 scope");
-    return scopes;
+    if (!values.some((scope) => catalogScopes.has(scope))) throw new Error("OIDC scope 必须包含至少一个模型");
+    return values;
+}
+
+export function modelCatalog() {
+    return oidcModelCatalog.map(({ scope: _scope, ...model }) => model);
+}
+
+export function scopesForModelIds(value: unknown) {
+    if (!Array.isArray(value) || !value.length || value.some((id) => typeof id !== "string")) throw new Error("必须选择至少一个 OIDC 模型");
+    const ids = value.map((id) => id.trim());
+    if (new Set(ids).size !== ids.length) throw new Error("OIDC 模型不能重复");
+    const selected = ids.map((id) => oidcModelCatalog.find((model) => model.id === id));
+    if (selected.some((model) => !model)) throw new Error("OIDC 模型不在目录中");
+    return ["openid", "offline_access", ...selected.map((model) => model!.scope)];
 }
 
 export function scopeModels(scopes: string[]) {
     const enabledScopes = new Set(scopes);
-    return approvedModels.filter((model) => enabledScopes.has(model.scope));
+    return oidcModelCatalog.filter((model) => enabledScopes.has(model.scope)).map(({ scope: _scope, ...model }) => model);
 }
 
 export function loadOidcConfig(env = process.env): OidcConfig | null {
-    const required = ["OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_SESSION_KEY", "PUBLIC_ORIGIN", "OIDC_REQUESTED_SCOPES"] as const;
+    const required = ["OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_SESSION_KEY", "PUBLIC_ORIGIN"] as const;
     if (required.some((key) => !env[key]?.trim())) return null;
 
     const sessionKey = Buffer.from(env.OIDC_SESSION_KEY!, "base64url");
     if (sessionKey.byteLength !== 32) throw new Error("OIDC_SESSION_KEY 必须是 base64url 编码的 32 字节密钥");
 
-    const scopes = parseScopes(env.OIDC_REQUESTED_SCOPES!);
     const issuer = normalizedOrigin(env.OIDC_ISSUER!, "OIDC_ISSUER");
     const gatewayBaseUrl = env.OIDC_GATEWAY_BASE_URL?.trim()
         ? normalizedOrigin(env.OIDC_GATEWAY_BASE_URL, "OIDC_GATEWAY_BASE_URL")
@@ -91,7 +103,5 @@ export function loadOidcConfig(env = process.env): OidcConfig | null {
         providerName: env.OIDC_PROVIDER_NAME?.trim() || "Provider",
         publicOrigin: normalizedOrigin(env.PUBLIC_ORIGIN!, "PUBLIC_ORIGIN"),
         proxyTimeoutMs: proxyTimeout(env.OIDC_PROXY_TIMEOUT_MS),
-        scopes,
-        models: scopeModels(scopes),
     };
 }

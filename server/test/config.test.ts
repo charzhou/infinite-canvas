@@ -1,18 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loadOidcConfig } from "../src/config.js";
-
-const approvedScopes = [
-    "openid",
-    "offline_access",
-    "llm:grok:grok-imagine-image",
-    "llm:grok:grok-imagine-image-quality",
-    "llm:grok:grok-imagine-video",
-    "llm:grok:grok-imagine-video-1.5",
-    "llm:openai:gpt-image-2",
-    "llm:openai:gpt-5.6-terra",
-].join(" ");
+import { loadOidcConfig, modelCatalog, parseScopes, scopeModels, scopesForModelIds } from "../src/config.js";
 
 const testEnv = {
     OIDC_ISSUER: "https://issuer.example/",
@@ -20,21 +9,22 @@ const testEnv = {
     OIDC_CLIENT_SECRET: "client-secret",
     OIDC_SESSION_KEY: Buffer.alloc(32, 7).toString("base64url"),
     OIDC_PROVIDER_NAME: "My Compute",
-    OIDC_REQUESTED_SCOPES: approvedScopes,
     PUBLIC_ORIGIN: "https://canvas.example/",
 };
 
-test("loads the approved exact scopes into protocol and capability metadata", () => {
+test("loads deployment config and the static model catalog", () => {
     const config = loadOidcConfig(testEnv);
 
     assert.deepEqual(
-        config?.models.map(({ name, apiFormat, capability }) => ({ name, apiFormat, capability })),
+        modelCatalog().map(({ name, apiFormat, capability }) => ({ name, apiFormat, capability })),
         [
             { name: "grok-imagine-image", apiFormat: "xai", capability: "image" },
             { name: "grok-imagine-image-quality", apiFormat: "xai", capability: "image" },
             { name: "grok-imagine-video", apiFormat: "xai", capability: "video" },
             { name: "grok-imagine-video-1.5", apiFormat: "xai", capability: "video" },
             { name: "gpt-image-2", apiFormat: "openai", capability: "image" },
+            { name: "seedance-2-0", apiFormat: "openai", capability: "video" },
+            { name: "seedance-2-0-mini", apiFormat: "openai", capability: "video" },
             { name: "gpt-5.6-terra", apiFormat: "openai", capability: "text" },
         ],
     );
@@ -60,25 +50,23 @@ test("rejects gateway base url paths", () => {
     assert.throws(() => loadOidcConfig({ ...testEnv, OIDC_GATEWAY_BASE_URL: "https://cdn.example/v1" }));
 });
 
-test("rejects bare, wildcard, duplicate openid, and unsupported model scopes", () => {
+test("validates granted scopes against the static model catalog", () => {
     for (const scope of [
         "openid offline_access llm",
         "openid offline_access llm:openai:*",
         "openid offline_access openid llm:openai:gpt-image-2",
         "openid offline_access llm:openai:gpt-4.1",
     ]) {
-        assert.throws(() => loadOidcConfig({ ...testEnv, OIDC_REQUESTED_SCOPES: scope }));
+        assert.throws(() => parseScopes(scope));
     }
 });
 
-test("accepts offline access and a configured subset of mapped model scopes", () => {
-    const config = loadOidcConfig({
-        ...testEnv,
-        OIDC_REQUESTED_SCOPES: "openid offline_access llm:openai:gpt-image-2",
-    });
+test("maps selected catalog IDs to exact requested scopes", () => {
+    const scopes = scopesForModelIds(["openai/gpt-image-2", "openai/seedance-2-0", "grok/grok-imagine-video"]);
 
-    assert.deepEqual(config?.scopes, ["openid", "offline_access", "llm:openai:gpt-image-2"]);
-    assert.deepEqual(config?.models.map((model) => model.name), ["gpt-image-2"]);
+    assert.deepEqual(scopes, ["openid", "offline_access", "llm:openai:gpt-image-2", "llm:openai:seedance-2-0", "llm:grok:grok-imagine-video"]);
+    assert.deepEqual(scopeModels(scopes).map((model) => model.name), ["grok-imagine-video", "gpt-image-2", "seedance-2-0"]);
+    assert.throws(() => scopesForModelIds(["unknown/model"]));
 });
 
 test("does not enable OIDC when deployment values are absent", () => {

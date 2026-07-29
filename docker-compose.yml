@@ -13,7 +13,6 @@ services:
     #   OIDC_SESSION_KEY: change-me-base64url-32-bytes
     #   OIDC_PROXY_TIMEOUT_MS: 600000
     #   OIDC_PROVIDER_NAME: Provider 名称
-    #   OIDC_REQUESTED_SCOPES: openid offline_access llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra
     #   PUBLIC_ORIGIN: https://canvas.example.com
     # 统计分析（可选，默认关闭）。每家一个独立变量，填了谁就启用谁，可同时启用多家：
     # environment:

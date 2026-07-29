@@ -8,12 +8,13 @@ import { loadOidcConfig } from "../src/config.js";
 import { createApp } from "../src/app.js";
 import { OidcTokenError } from "../src/oidc.js";
 
+const scopes = ["openid", "offline_access", "llm:grok:grok-imagine-image", "llm:grok:grok-imagine-image-quality", "llm:grok:grok-imagine-video", "llm:grok:grok-imagine-video-1.5", "llm:openai:gpt-image-2", "llm:openai:gpt-5.6-terra"];
+
 const config = loadOidcConfig({
     OIDC_ISSUER: "https://issuer.example",
     OIDC_CLIENT_ID: "canvas-client",
     OIDC_CLIENT_SECRET: "client-secret",
     OIDC_SESSION_KEY: Buffer.alloc(32, 7).toString("base64url"),
-    OIDC_REQUESTED_SCOPES: "openid offline_access llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra",
     PUBLIC_ORIGIN: "https://canvas.example",
 });
 
@@ -25,7 +26,6 @@ const gatewayConfig = loadOidcConfig({
     OIDC_CLIENT_ID: "canvas-client",
     OIDC_CLIENT_SECRET: "client-secret",
     OIDC_SESSION_KEY: Buffer.alloc(32, 9).toString("base64url"),
-    OIDC_REQUESTED_SCOPES: "openid offline_access llm:grok:grok-imagine-image llm:grok:grok-imagine-image-quality llm:grok:grok-imagine-video llm:grok:grok-imagine-video-1.5 llm:openai:gpt-image-2 llm:openai:gpt-5.6-terra",
     PUBLIC_ORIGIN: "https://canvas.example",
 });
 
@@ -40,7 +40,7 @@ function authenticatedCookie(activeConfig = config) {
             refreshTokenExpiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
             subject: "subject-1",
             issuer: activeConfig.issuer.origin,
-            scopes: activeConfig.scopes,
+            scopes,
             createdAt: new Date().toISOString(),
         },
         activeConfig.sessionKey,
@@ -115,7 +115,7 @@ test("proxy refreshes an expiring session and rotates its encrypted credentials"
             refresh: async (_config, _discovery, refreshToken) => {
                 refreshCalls += 1;
                 assert.equal(refreshToken, "first-refresh-token");
-                return { accessToken: "fresh-derived-token", idToken: "fresh-id-token", refreshToken: "new-refresh-token", expiresIn: 900, refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 3600, scope: config.scopes.join(" ") };
+                return { accessToken: "fresh-derived-token", idToken: "fresh-id-token", refreshToken: "new-refresh-token", expiresIn: 900, refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 3600, scope: scopes.join(" ") };
             },
             verifyIdToken: async () => "subject-1",
         },
@@ -126,7 +126,7 @@ test("proxy refreshes an expiring session and rotates its encrypted credentials"
             },
         },
     });
-    const cookie = `${sessionCookie.name}=${sealCookie({ accessToken: "expired-derived-token", refreshToken: "first-refresh-token", accessTokenExpiresAt: Date.now(), refreshTokenExpiresAt: Date.now() + 60_000, subject: "subject-1", issuer: config.issuer.origin, scopes: config.scopes, createdAt: new Date().toISOString() }, config.sessionKey)}`;
+    const cookie = `${sessionCookie.name}=${sealCookie({ accessToken: "expired-derived-token", refreshToken: "first-refresh-token", accessTokenExpiresAt: Date.now(), refreshTokenExpiresAt: Date.now() + 60_000, subject: "subject-1", issuer: config.issuer.origin, scopes, createdAt: new Date().toISOString() }, config.sessionKey)}`;
 
     const response = await request(app).post("/api/oidc/proxy/v1/images/generations").set("Origin", "https://canvas.example").set("Cookie", cookie).send({ model: "gpt-image-2", prompt: "test" });
     const rotated = response.headers["set-cookie"]?.find((value) => value.startsWith(`${sessionCookie.name}=`));
@@ -153,13 +153,13 @@ test("proxy shares one refresh for concurrent requests from the same browser ses
                 refreshCalls += 1;
                 startRefresh();
                 await finished;
-                return { accessToken: "fresh-derived-token", idToken: "fresh-id-token", refreshToken: "new-refresh-token", expiresIn: 900, refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 3600, scope: config.scopes.join(" ") };
+                return { accessToken: "fresh-derived-token", idToken: "fresh-id-token", refreshToken: "new-refresh-token", expiresIn: 900, refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 3600, scope: scopes.join(" ") };
             },
             verifyIdToken: async () => "subject-1",
         },
         proxy: { fetch: async () => new Response(JSON.stringify({ created: true }), { status: 200, headers: { "Content-Type": "application/json" } }) },
     });
-    const cookie = `${sessionCookie.name}=${sealCookie({ accessToken: "expired-derived-token", refreshToken: "old-refresh-token", accessTokenExpiresAt: Date.now(), refreshTokenExpiresAt: Date.now() + 60_000, subject: "subject-1", issuer: config.issuer.origin, scopes: config.scopes, createdAt: new Date().toISOString() }, config.sessionKey)}`;
+    const cookie = `${sessionCookie.name}=${sealCookie({ accessToken: "expired-derived-token", refreshToken: "old-refresh-token", accessTokenExpiresAt: Date.now(), refreshTokenExpiresAt: Date.now() + 60_000, subject: "subject-1", issuer: config.issuer.origin, scopes, createdAt: new Date().toISOString() }, config.sessionKey)}`;
     const first = request(app).post("/api/oidc/proxy/v1/images/generations").set("Origin", "https://canvas.example").set("Cookie", cookie).send({ model: "gpt-image-2", prompt: "test" }).then((response) => response);
     await refreshing;
     const second = request(app).post("/api/oidc/proxy/v1/images/generations").set("Origin", "https://canvas.example").set("Cookie", cookie).send({ model: "gpt-image-2", prompt: "test" }).then((response) => response);
@@ -179,7 +179,7 @@ test("proxy clears a session when its refresh grant is invalid", async () => {
             refresh: async () => { throw new OidcTokenError("invalid_grant", "refresh token is invalid"); },
         },
     });
-    const cookie = `${sessionCookie.name}=${sealCookie({ accessToken: "expired-derived-token", refreshToken: "invalid-refresh-token", accessTokenExpiresAt: Date.now(), refreshTokenExpiresAt: Date.now() + 60_000, subject: "subject-1", issuer: config.issuer.origin, scopes: config.scopes, createdAt: new Date().toISOString() }, config.sessionKey)}`;
+    const cookie = `${sessionCookie.name}=${sealCookie({ accessToken: "expired-derived-token", refreshToken: "invalid-refresh-token", accessTokenExpiresAt: Date.now(), refreshTokenExpiresAt: Date.now() + 60_000, subject: "subject-1", issuer: config.issuer.origin, scopes, createdAt: new Date().toISOString() }, config.sessionKey)}`;
 
     const response = await request(app).post("/api/oidc/proxy/v1/images/generations").set("Origin", "https://canvas.example").set("Cookie", cookie).send({ model: "gpt-image-2", prompt: "test" });
 
@@ -193,11 +193,11 @@ test("proxy clears a session when a refreshed cookie exceeds the browser limit",
     const app = createApp(config, {
         oidc: {
             discoveryFor: async () => ({ issuer: config.issuer.origin, authorization_endpoint: "https://issuer.example/oauth/authorize", token_endpoint: "https://issuer.example/oauth/token", revocation_endpoint: "https://issuer.example/oauth/revoke", jwks_uri: "https://issuer.example/oauth/jwks" }),
-            refresh: async () => ({ accessToken: "x".repeat(4_000), idToken: "fresh-id-token", refreshToken: "new-refresh-token", expiresIn: 900, refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 3600, scope: config.scopes.join(" ") }),
+            refresh: async () => ({ accessToken: "x".repeat(4_000), idToken: "fresh-id-token", refreshToken: "new-refresh-token", expiresIn: 900, refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 3600, scope: scopes.join(" ") }),
             verifyIdToken: async () => "subject-1",
         },
     });
-    const cookie = `${sessionCookie.name}=${sealCookie({ accessToken: "expired-derived-token", refreshToken: "oversized-refresh-token", accessTokenExpiresAt: Date.now(), refreshTokenExpiresAt: Date.now() + 60_000, subject: "subject-1", issuer: config.issuer.origin, scopes: config.scopes, createdAt: new Date().toISOString() }, config.sessionKey)}`;
+    const cookie = `${sessionCookie.name}=${sealCookie({ accessToken: "expired-derived-token", refreshToken: "oversized-refresh-token", accessTokenExpiresAt: Date.now(), refreshTokenExpiresAt: Date.now() + 60_000, subject: "subject-1", issuer: config.issuer.origin, scopes, createdAt: new Date().toISOString() }, config.sessionKey)}`;
 
     const response = await request(app).post("/api/oidc/proxy/v1/images/generations").set("Origin", "https://canvas.example").set("Cookie", cookie).send({ model: "gpt-image-2", prompt: "test" });
 
