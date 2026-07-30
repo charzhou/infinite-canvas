@@ -34,6 +34,16 @@ export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: stri
 export type VideoGenerationTask = { id: string; provider: "openai" | "seedance" | "xai" | "plugin"; model: string };
 export type VideoGenerationTaskState = { status: "pending" } | { status: "completed"; result: VideoGenerationResult } | { status: "failed"; error: string };
 
+const VIDEO_POLL_MAX_DELAY_MS = 60000;
+
+export function videoPollDelay(attempt: number) {
+    return Math.min(5000 * 2 ** attempt, VIDEO_POLL_MAX_DELAY_MS);
+}
+
+export function videoPollTimeoutMs() {
+    return 1800000;
+}
+
 /** Results for scripted (plugin) video models, which run their own create+poll in one shot at task creation. */
 const pluginVideoResults = new Map<string, VideoGenerationResult>();
 
@@ -50,16 +60,17 @@ function aiHeaders(config: AiConfig, contentType?: string) {
 
 export async function requestVideoGeneration(config: AiConfig, prompt: string, references: ReferenceImage[] = [], videoReferences: ReferenceVideo[] = [], audioReferences: ReferenceAudio[] = [], options?: RequestOptions): Promise<VideoGenerationResult> {
     const task = await createVideoGenerationTask(config, prompt, references, videoReferences, audioReferences, options);
-    const delayMs = task.provider === "seedance" || task.provider === "xai" ? 5000 : 2500;
-    for (let attempt = 0; attempt < 120; attempt += 1) {
+    const deadline = performance.now() + videoPollTimeoutMs();
+    for (let attempt = 0; performance.now() < deadline; attempt += 1) {
         if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
         const state = await pollVideoGenerationTask(config, task, options);
         if (state.status === "completed") return state.result;
         if (state.status === "failed") throw new Error(state.error);
-        if (attempt === 119) throw new Error(`${task.provider === "seedance" ? "Seedance " : task.provider === "xai" ? "xAI " : ""}视频生成超时，请稍后重试`);
-        await delay(delayMs, options?.signal);
+        const remainingMs = deadline - performance.now();
+        if (remainingMs <= 0) break;
+        await delay(Math.min(videoPollDelay(attempt), remainingMs), options?.signal);
     }
-    throw new Error("视频生成超时，请稍后重试");
+    throw new Error(`${task.provider === "seedance" ? "Seedance " : task.provider === "xai" ? "xAI " : ""}视频生成超时，请稍后重试`);
 }
 
 export async function createVideoGenerationTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], videoReferences: ReferenceVideo[] = [], audioReferences: ReferenceAudio[] = [], options?: RequestOptions): Promise<VideoGenerationTask> {

@@ -4,7 +4,7 @@ vi.mock("axios", () => ({ default: { post: vi.fn(), get: vi.fn(), isCancel: vi.f
 
 import axios from "axios";
 
-import { createVideoGenerationTask, pollVideoGenerationTask } from "./video";
+import { createVideoGenerationTask, pollVideoGenerationTask, videoPollDelay, videoPollTimeoutMs } from "./video";
 import { defaultConfig, type AiConfig } from "@/stores/use-config-store";
 
 const oidcXaiConfig = {
@@ -13,6 +13,16 @@ const oidcXaiConfig = {
     videoModel: "oidc::grok-imagine-video",
     channels: [{ id: "oidc", name: "Sub2API", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", models: [{ name: "grok-imagine-video", capability: "video", apiFormat: "xai" }] }],
 } as AiConfig;
+
+it("increases pending video polling delays exponentially with a cap", () => {
+    expect(videoPollDelay(0)).toBe(5000);
+    expect(videoPollDelay(1)).toBe(10000);
+    expect(videoPollDelay(4)).toBe(60000);
+});
+
+it("uses the same extended timeout for every video task", () => {
+    expect(videoPollTimeoutMs()).toBe(1800000);
+});
 
 it("allows an OIDC xAI video model without a browser API key", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { request_id: "video-request" } });
