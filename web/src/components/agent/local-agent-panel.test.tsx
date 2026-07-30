@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { useAgentStore } from "@/stores/use-agent-store";
-import { CanvasLocalAgentPanel } from "./canvas-local-agent-panel";
+import { LocalAgentPanel } from "./local-agent-panel";
 
 class MockEventSource {
     static instances: MockEventSource[] = [];
@@ -59,7 +59,7 @@ it("shows an unscoped legacy Agent reply in the active thread", async () => {
     render(
         <MemoryRouter>
             <App>
-                <CanvasLocalAgentPanel embedded />
+                <LocalAgentPanel embedded />
             </App>
         </MemoryRouter>,
     );
@@ -73,5 +73,5 @@ it("shows an unscoped legacy Agent reply in the active thread", async () => {
         await Promise.resolve();
     });
 
-    expect(useAgentStore.getState().messages).toEqual([expect.objectContaining({ role: "assistant", text: "旧 Agent 的实时回复" })]);
+    await waitFor(() => expect(useAgentStore.getState().messages).toEqual([expect.objectContaining({ role: "assistant", text: "旧 Agent 的实时回复" })]));
 });
