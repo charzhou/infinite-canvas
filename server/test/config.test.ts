@@ -25,6 +25,7 @@ test("loads deployment config and the static model catalog", () => {
             { name: "gpt-image-2", apiFormat: "openai", capability: "image" },
             { name: "seedance-2-0", apiFormat: "openai", capability: "video" },
             { name: "seedance-2-0-mini", apiFormat: "openai", capability: "video" },
+            { name: "seedance-2-0-fast", apiFormat: "openai", capability: "video" },
             { name: "gpt-5.6-terra", apiFormat: "openai", capability: "text" },
         ],
     );

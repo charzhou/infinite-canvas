@@ -56,6 +56,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # OIDC 算力渠道
 
+- OIDC 授权模型目录：在未连接状态选择 `seedance-2-0-fast` 后完成授权，确认 Provider OAuth Client 的 `allowed_llm_scopes` 包含 `llm:openai:seedance-2-0-fast`，且已连接渠道可将其作为 OpenAI 格式视频模型使用。
 - 使用账户授权和仅 API Key 批准两种 Provider 路径完成浏览器授权。
 - 分别使用 `gpt-5.6-terra` 文本、`gpt-image-2` 与两个 Grok 生图别名、两个 Grok 视频别名、`seedance-2-0` 和 `seedance-2-0-mini` 生成内容。
 - 在画布中选择受管理的 Grok 视频模型生成视频时，不应要求填写浏览器 API Key。
