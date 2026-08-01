@@ -57,6 +57,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # OIDC 算力渠道
 
+- Sub2API 受管理视频渠道：OpenAI Video 模型以 JSON 调用 `/v1/videos`，xAI 模型以 `reference_images` 调用 `/v1/videos/generations`；普通手动 OpenAI/xAI 渠道的原请求格式不变。两类完成任务均应下载为本地媒体资产，刷新后未完成的任务仍按创建时协议继续轮询。
 - OIDC 授权模型目录：在未连接状态选择 `seedance-2-0-fast` 后完成授权，确认 Provider OAuth Client 的 `allowed_llm_scopes` 包含 `llm:openai:seedance-2-0-fast`，且已连接渠道可将其作为 OpenAI 格式视频模型使用。
 - 使用账户授权和仅 API Key 批准两种 Provider 路径完成浏览器授权。
 - 分别使用 `gpt-5.6-terra` 文本、`gpt-image-2` 与两个 Grok 生图别名、两个 Grok 视频别名、`seedance-2-0` 和 `seedance-2-0-mini` 生成内容。
