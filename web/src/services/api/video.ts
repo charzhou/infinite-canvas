@@ -7,6 +7,7 @@ import { imageToDataUrl } from "@/services/image-storage";
 import { boolConfig, buildSeedancePromptText, isSeedanceVideoConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceVideoReferenceError, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
 import { buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, type AiConfig, type ModelRequestConfig } from "@/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
+import { createSub2ApiVideoTask, pollSub2ApiVideoTask } from "./sub2api-video";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 
@@ -31,7 +32,7 @@ type ApiEnvelope<T> = T | { code?: number | string; data?: T | null; msg?: strin
 type RequestOptions = { signal?: AbortSignal };
 
 export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
-export type VideoGenerationTask = { id: string; provider: "openai" | "seedance" | "xai" | "plugin"; model: string };
+export type VideoGenerationTask = { id: string; provider: "openai" | "seedance" | "xai" | "plugin"; model: string; adapter?: "sub2api" };
 export type VideoGenerationTaskState = { status: "pending" } | { status: "completed"; result: VideoGenerationResult } | { status: "failed"; error: string };
 
 const VIDEO_POLL_MAX_DELAY_MS = 60000;
@@ -82,6 +83,12 @@ export async function createVideoGenerationTask(config: AiConfig, prompt: string
     if (isSeedanceVideoConfig(requestConfig)) {
         return createSeedanceTask(requestConfig, selectedModel, prompt, references, videoReferences, audioReferences, options);
     }
+    if (requestConfig.providerId === "sub2api") {
+        if (videoReferences.length || audioReferences.length) {
+            throw new Error(requestConfig.apiFormat === "xai" ? "xAI 视频接口暂不支持参考视频或参考音频，请移除这些参考资产" : "当前视频接口不支持参考视频或参考音频，请切换到 Seedance 2.0 / 火山 Agent Plan 模型，或移除参考资产");
+        }
+        return createSub2ApiVideoTask(requestConfig, selectedModel, prompt, references, options);
+    }
     if (requestConfig.apiFormat === "xai") {
         if (videoReferences.length || audioReferences.length) {
             throw new Error("xAI 视频接口暂不支持参考视频或参考音频，请移除这些参考资产");
@@ -101,6 +108,7 @@ export async function pollVideoGenerationTask(config: AiConfig, task: VideoGener
     }
     const requestConfig = resolveModelRequestConfig(config, task.model);
     assertVideoConfig(requestConfig, requestConfig.model);
+    if (task.adapter === "sub2api") return pollSub2ApiVideoTask(requestConfig, task, options);
     return task.provider === "seedance"
         ? pollSeedanceTask(requestConfig, task, options)
         : task.provider === "xai"
