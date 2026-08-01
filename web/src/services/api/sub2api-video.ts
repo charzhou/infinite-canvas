@@ -3,17 +3,23 @@ import axios from "axios";
 import { buildApiUrl, modelOptionName, type ModelRequestConfig } from "@/stores/use-config-store";
 import { imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
-import type { VideoGenerationTask } from "./video";
+import type { VideoGenerationTask, VideoGenerationTaskState } from "./video";
 
 type RequestOptions = { signal?: AbortSignal };
-type VideoResponse = { id: string };
-type XaiVideoTask = { request_id?: string };
+type VideoResponse = { id: string; status?: "queued" | "in_progress" | "completed" | "failed"; video?: { url?: string } | null; error?: { message?: string } | string | null };
+type XaiVideoTask = { request_id?: string; status?: "pending" | "done" | "failed" | "expired"; video?: { url?: string } | null; error?: { message?: string } | string | null };
 type ApiVideoResponse = VideoResponse | { code?: number | string; data?: VideoResponse | null; msg?: string; message?: string; error?: { message?: string } };
 
 export async function createSub2ApiVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
     return config.apiFormat === "xai"
         ? createSub2ApiXaiVideoTask(config, model, prompt, references, options)
         : createSub2ApiOpenAIVideoTask(config, model, prompt, references, options);
+}
+
+export async function pollSub2ApiVideoTask(config: ModelRequestConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
+    return task.provider === "xai"
+        ? pollSub2ApiXaiVideoTask(config, task, options)
+        : pollSub2ApiOpenAIVideoTask(config, task, options);
 }
 
 async function createSub2ApiOpenAIVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
@@ -53,6 +59,46 @@ async function createSub2ApiXaiVideoTask(config: ModelRequestConfig, model: stri
     } catch (error) {
         throw new Error(readAxiosError(error, "xAI 视频任务创建失败"));
     }
+}
+
+async function pollSub2ApiOpenAIVideoTask(config: ModelRequestConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
+    try {
+        const video = unwrapVideoResponse((await axios.get<ApiVideoResponse>(apiUrl(config, `/videos/${task.id}`), requestOptions(config, undefined, options))).data);
+        if (video.status === "completed") return { status: "completed", result: { blob: await downloadVideoBlob(config, task, video.video?.url, options) } };
+        if (video.status === "failed") return { status: "failed", error: readError(video.error) || "视频生成失败" };
+        return { status: "pending" };
+    } catch (error) {
+        throw new Error(readAxiosError(error, "视频任务查询失败"));
+    }
+}
+
+async function pollSub2ApiXaiVideoTask(config: ModelRequestConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
+    try {
+        const state = (await axios.get<XaiVideoTask>(apiUrl(config, `/videos/${task.id}`), requestOptions(config, undefined, options))).data;
+        if (state.status === "done") return { status: "completed", result: { blob: await downloadVideoBlob(config, task, state.video?.url, options) } };
+        if (state.status === "failed" || state.status === "expired") return { status: "failed", error: readError(state.error) || `xAI 视频生成${state.status === "expired" ? "超时" : "失败"}` };
+        return { status: "pending" };
+    } catch (error) {
+        throw new Error(readAxiosError(error, "xAI 视频任务查询失败"));
+    }
+}
+
+async function downloadVideoBlob(config: ModelRequestConfig, task: VideoGenerationTask, signedUrl: string | undefined, options?: RequestOptions) {
+    if (signedUrl) {
+        try {
+            const response = await axios.get<Blob>(signedUrl, { responseType: "blob", signal: options?.signal });
+            if (isVideoBlob(response.data)) return response.data;
+        } catch (error) {
+            if (axios.isCancel(error) || options?.signal?.aborted) throw error;
+        }
+    }
+    const response = await axios.get<Blob>(apiUrl(config, `/videos/${task.id}/content`), { ...requestOptions(config, undefined, options), responseType: "blob" });
+    if (!isVideoBlob(response.data)) throw new Error("视频下载失败");
+    return response.data;
+}
+
+function isVideoBlob(value: unknown): value is Blob {
+    return value instanceof Blob && value.size > 0;
 }
 
 function apiUrl(config: ModelRequestConfig, path: string) {

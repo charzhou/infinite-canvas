@@ -7,7 +7,7 @@ import { imageToDataUrl } from "@/services/image-storage";
 import { boolConfig, buildSeedancePromptText, isSeedanceVideoConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceVideoReferenceError, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
 import { buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, type AiConfig, type ModelRequestConfig } from "@/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
-import { createSub2ApiVideoTask } from "./sub2api-video";
+import { createSub2ApiVideoTask, pollSub2ApiVideoTask } from "./sub2api-video";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 
@@ -108,6 +108,7 @@ export async function pollVideoGenerationTask(config: AiConfig, task: VideoGener
     }
     const requestConfig = resolveModelRequestConfig(config, task.model);
     assertVideoConfig(requestConfig, requestConfig.model);
+    if (task.adapter === "sub2api") return pollSub2ApiVideoTask(requestConfig, task, options);
     return task.provider === "seedance"
         ? pollSeedanceTask(requestConfig, task, options)
         : task.provider === "xai"

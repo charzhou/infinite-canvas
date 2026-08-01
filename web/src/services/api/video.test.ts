@@ -81,6 +81,55 @@ it("keeps generic xAI multiple reference behavior unchanged", async () => {
     expect(payload).not.toHaveProperty("reference_images");
 });
 
+it("downloads a completed Sub2API OpenAI video from its signed URL without gateway credentials", async () => {
+    const content = new Blob(["video"], { type: "video/mp4" });
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { status: "completed", video: { url: "https://storage.example/video.mp4" } } })
+        .mockResolvedValueOnce({ data: content });
+
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+        .resolves.toEqual({ status: "completed", result: { blob: content } });
+    expect(axios.get).toHaveBeenNthCalledWith(1, "/api/oidc/proxy/v1/videos/video-task", { headers: { Authorization: "Bearer " }, signal: undefined });
+    expect(axios.get).toHaveBeenNthCalledWith(2, "https://storage.example/video.mp4", { responseType: "blob", signal: undefined });
+});
+
+it("falls back to the Sub2API content endpoint when a completed video has no signed URL", async () => {
+    const content = new Blob(["video"], { type: "video/mp4" });
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { status: "completed" } })
+        .mockResolvedValueOnce({ data: content });
+
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+        .resolves.toEqual({ status: "completed", result: { blob: content } });
+    expect(axios.get).toHaveBeenNthCalledWith(2, "/api/oidc/proxy/v1/videos/video-task/content", { headers: { Authorization: "Bearer " }, responseType: "blob", signal: undefined });
+});
+
+it("falls back to the Sub2API content endpoint when the signed download is empty", async () => {
+    const content = new Blob(["video"], { type: "video/mp4" });
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { status: "completed", video: { url: "https://storage.example/video.mp4" } } })
+        .mockResolvedValueOnce({ data: new Blob() })
+        .mockResolvedValueOnce({ data: content });
+
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+        .resolves.toEqual({ status: "completed", result: { blob: content } });
+    expect(axios.get).toHaveBeenNthCalledWith(3, "/api/oidc/proxy/v1/videos/video-task/content", { headers: { Authorization: "Bearer " }, responseType: "blob", signal: undefined });
+});
+
+it("maps Sub2API xAI done, failed, and expired states", async () => {
+    const content = new Blob(["video"], { type: "video/mp4" });
+    const task = { id: "video-request", provider: "xai" as const, model: "oidc::grok-imagine-video", adapter: "sub2api" as const };
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { status: "done", video: { url: "https://storage.example/video.mp4" } } })
+        .mockResolvedValueOnce({ data: content })
+        .mockResolvedValueOnce({ data: { status: "failed", error: { message: "生成失败" } } })
+        .mockResolvedValueOnce({ data: { status: "expired", error: { message: "任务已过期" } } });
+
+    await expect(pollVideoGenerationTask(oidcXaiConfig, task)).resolves.toEqual({ status: "completed", result: { blob: content } });
+    await expect(pollVideoGenerationTask(oidcXaiConfig, task)).resolves.toEqual({ status: "failed", error: "生成失败" });
+    await expect(pollVideoGenerationTask(oidcXaiConfig, task)).resolves.toEqual({ status: "failed", error: "任务已过期" });
+});
+
 it("downloads a completed xAI video through the channel content endpoint", async () => {
     const content = new Blob(["video"], { type: "video/mp4" });
     vi.mocked(axios.get)
