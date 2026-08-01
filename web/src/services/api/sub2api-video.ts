@@ -87,20 +87,24 @@ async function downloadVideoBlob(config: ModelRequestConfig, task: VideoGenerati
     if (signedUrl) {
         try {
             const response = await axios.get<Blob>(signedUrl, { responseType: "blob", signal: options?.signal });
-            if (isVideoBlob(response.data)) return response.data;
+            if (await isVideoBlob(response.data)) return response.data;
         } catch (error) {
             if (axios.isCancel(error) || options?.signal?.aborted) throw error;
         }
     }
     const response = await axios.get<Blob>(apiUrl(config, `/videos/${task.id}/content`), { ...requestOptions(config, undefined, options), responseType: "blob" });
-    if (!isVideoBlob(response.data)) throw new Error("视频下载失败");
+    if (!(await isVideoBlob(response.data))) throw new Error("视频下载失败");
     return response.data;
 }
 
-function isVideoBlob(value: unknown): value is Blob {
+async function isVideoBlob(value: unknown): Promise<boolean> {
     if (!(value instanceof Blob) || value.size === 0) return false;
     const mimeType = value.type.split(";", 1)[0].trim().toLowerCase();
-    return !mimeType || mimeType.startsWith("video/") || mimeType === "application/octet-stream";
+    if (mimeType.startsWith("video/")) return true;
+    if (mimeType && mimeType !== "application/octet-stream") return false;
+    const bytes = new Uint8Array(await value.slice(0, 12).arrayBuffer());
+    return (bytes.length >= 8 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70)
+        || (bytes.length >= 4 && bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3);
 }
 
 function apiUrl(config: ModelRequestConfig, path: string) {

@@ -118,6 +118,18 @@ it("falls back to the Sub2API content endpoint when the signed download is an er
     expect(axios.get).toHaveBeenNthCalledWith(3, "/api/oidc/proxy/v1/videos/video-task/content", { headers: { Authorization: "Bearer " }, responseType: "blob", signal: undefined });
 });
 
+it("falls back to the Sub2API content endpoint when the signed error Blob has no MIME type", async () => {
+    const content = new Blob(["video"], { type: "video/mp4" });
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { status: "completed", video: { url: "https://storage.example/video.mp4" } } })
+        .mockResolvedValueOnce({ data: new Blob(["{\"error\":\"expired\"}"]) })
+        .mockResolvedValueOnce({ data: content });
+
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+        .resolves.toEqual({ status: "completed", result: { blob: content } });
+    expect(axios.get).toHaveBeenNthCalledWith(3, "/api/oidc/proxy/v1/videos/video-task/content", { headers: { Authorization: "Bearer " }, responseType: "blob", signal: undefined });
+});
+
 it("falls back to the Sub2API content endpoint when the signed download rejects", async () => {
     const content = new Blob(["video"], { type: "video/mp4" });
     vi.mocked(axios.get)
@@ -137,6 +149,26 @@ it("rejects an invalid Sub2API content Blob", async () => {
 
     await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
         .rejects.toThrow("视频下载失败");
+});
+
+it("rejects an octet-stream Sub2API content error Blob", async () => {
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { status: "completed" } })
+        .mockResolvedValueOnce({ data: new Blob(["{\"error\":\"access denied\"}"], { type: "application/octet-stream" }) });
+
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+        .rejects.toThrow("视频下载失败");
+});
+
+it("accepts an octet-stream MP4 container from a Sub2API signed URL", async () => {
+    const content = new Blob([new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d])], { type: "application/octet-stream" });
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { status: "completed", video: { url: "https://storage.example/video.mp4" } } })
+        .mockResolvedValueOnce({ data: content });
+
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+        .resolves.toEqual({ status: "completed", result: { blob: content } });
+    expect(axios.get).toHaveBeenCalledTimes(2);
 });
 
 it("keeps Sub2API OpenAI queued and in-progress tasks pending, and preserves failures", async () => {
