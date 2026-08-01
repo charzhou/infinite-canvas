@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { removeOidcChannel, resolveModelRequestConfig, selectableModelsByCapability, type AiConfig } from "./use-config-store";
+import { createModelChannel, removeOidcChannel, resolveModelRequestConfig, selectableModelsByCapability, type AiConfig, type ModelChannel } from "./use-config-store";
 
 const configWithOidcGrokVideo = {
     channels: [
@@ -8,8 +8,24 @@ const configWithOidcGrokVideo = {
     ],
 } as unknown as AiConfig;
 
+const sub2ApiChannel = {
+    id: "oidc",
+    name: "算力渠道",
+    baseUrl: "/api/oidc/proxy",
+    apiKey: "",
+    apiFormat: "openai",
+    authMode: "oidc",
+    providerId: "sub2api",
+    models: [{ name: "grok-imagine-video", capability: "video", apiFormat: "xai" }],
+} satisfies ModelChannel;
+
 it("uses a model api format over the managed channel default", () => {
     expect(resolveModelRequestConfig(configWithOidcGrokVideo, "oidc::grok-imagine-video").apiFormat).toBe("xai");
+});
+
+it("keeps the managed Sub2API provider on resolved model config", () => {
+    const config = { ...configWithOidcGrokVideo, channels: [createModelChannel(sub2ApiChannel)] } as AiConfig;
+    expect(resolveModelRequestConfig(config, "oidc::grok-imagine-video").providerId).toBe("sub2api");
 });
 
 it("removes only the managed channel when its BFF session becomes invalid", () => {

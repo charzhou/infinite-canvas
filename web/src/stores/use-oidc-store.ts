@@ -77,7 +77,7 @@ export const useOidcStore = create<OidcState>((set, get) => ({
         try {
             const models = await getOidcModels();
             const { providerName } = get();
-            useConfigStore.setState((state) => ({ config: syncManagedOidcChannel(state.config, { id: "oidc", name: providerName, baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", models }) }));
+            useConfigStore.setState((state) => ({ config: syncManagedOidcChannel(state.config, { id: "oidc", name: providerName, baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models }) }));
             set({ connected: true, modelIds: models.map((model) => model.id) });
         } catch (error) {
             removeManagedChannel();

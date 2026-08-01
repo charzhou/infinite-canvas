@@ -6,6 +6,7 @@ import { nanoid } from "nanoid";
 export type ApiCallFormat = "openai" | "gemini" | "xai" | "ark";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
+export type ManagedProviderId = "sub2api";
 
 export type ChannelModel = {
     name: string;
@@ -21,6 +22,7 @@ export type ModelChannel = {
     apiKey: string;
     apiFormat: ApiCallFormat;
     authMode?: "manual" | "oidc";
+    providerId?: ManagedProviderId;
     models: ChannelModel[];
 };
 
@@ -53,7 +55,7 @@ export type AiConfig = {
     canvasImageCount: string;
 };
 
-export type ModelRequestConfig = AiConfig & Pick<ModelChannel, "authMode">;
+export type ModelRequestConfig = AiConfig & Pick<ModelChannel, "authMode" | "providerId">;
 
 export type WebdavSyncConfig = {
     url: string;
@@ -288,6 +290,7 @@ export function createModelChannel(channel?: Partial<ModelChannel>): ModelChanne
         apiKey: channel?.apiKey || "",
         apiFormat,
         authMode: channel?.authMode === "oidc" ? "oidc" : "manual",
+        providerId: channel?.providerId,
         models: normalizeChannelModels(channel?.models),
     };
 }
@@ -350,6 +353,7 @@ export function resolveModelRequestConfig(config: AiConfig, value: string): Mode
         apiKey: channel.apiKey,
         apiFormat: model?.apiFormat || channel.apiFormat,
         authMode: channel.authMode,
+        providerId: channel.providerId,
     };
 }
 
