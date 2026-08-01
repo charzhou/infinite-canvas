@@ -87,7 +87,7 @@ it("downloads a completed xAI video through the channel content endpoint", async
         .mockResolvedValueOnce({ data: { status: "done", video: { url: "https://expired.example/video.mp4" } } })
         .mockResolvedValueOnce({ data: content });
 
-    const state = await pollVideoGenerationTask(oidcXaiConfig, { id: "video-request", provider: "xai", model: "oidc::grok-imagine-video", adapter: "sub2api" });
+    const state = await pollVideoGenerationTask(oidcXaiConfig, { id: "video-request", provider: "xai", model: "oidc::grok-imagine-video" });
 
     expect(state).toEqual({ status: "completed", result: { blob: content } });
     expect(axios.get).toHaveBeenNthCalledWith(1, "/api/oidc/proxy/v1/videos/video-request", { headers: { Authorization: "Bearer " }, signal: undefined });
@@ -100,6 +100,6 @@ it("treats the provider completed status as an xAI video result", async () => {
         .mockResolvedValueOnce({ data: { status: "completed", video: { url: "https://expired.example/video.mp4" } } })
         .mockResolvedValueOnce({ data: content });
 
-    await expect(pollVideoGenerationTask(oidcXaiConfig, { id: "video-request", provider: "xai", model: "oidc::grok-imagine-video", adapter: "sub2api" }))
+    await expect(pollVideoGenerationTask(oidcXaiConfig, { id: "video-request", provider: "xai", model: "oidc::grok-imagine-video" }))
         .resolves.toEqual({ status: "completed", result: { blob: content } });
 });
