@@ -98,7 +98,9 @@ async function downloadVideoBlob(config: ModelRequestConfig, task: VideoGenerati
 }
 
 function isVideoBlob(value: unknown): value is Blob {
-    return value instanceof Blob && value.size > 0;
+    if (!(value instanceof Blob) || value.size === 0) return false;
+    const mimeType = value.type.split(";", 1)[0].trim().toLowerCase();
+    return !mimeType || mimeType.startsWith("video/") || mimeType === "application/octet-stream";
 }
 
 function apiUrl(config: ModelRequestConfig, path: string) {

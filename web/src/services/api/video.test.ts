@@ -1,4 +1,4 @@
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 
 vi.mock("axios", () => ({ default: { post: vi.fn(), get: vi.fn(), isCancel: vi.fn() } }));
 
@@ -25,6 +25,8 @@ const genericXaiConfig = {
     ...oidcXaiConfig,
     channels: [{ ...oidcXaiConfig.channels[0], providerId: undefined }],
 } as AiConfig;
+
+beforeEach(() => vi.clearAllMocks());
 
 it("increases pending video polling delays exponentially with a cap", () => {
     expect(videoPollDelay(0)).toBe(5000);
@@ -104,16 +106,49 @@ it("falls back to the Sub2API content endpoint when a completed video has no sig
     expect(axios.get).toHaveBeenNthCalledWith(2, "/api/oidc/proxy/v1/videos/video-task/content", { headers: { Authorization: "Bearer " }, responseType: "blob", signal: undefined });
 });
 
-it("falls back to the Sub2API content endpoint when the signed download is empty", async () => {
+it("falls back to the Sub2API content endpoint when the signed download is an error Blob", async () => {
     const content = new Blob(["video"], { type: "video/mp4" });
     vi.mocked(axios.get)
         .mockResolvedValueOnce({ data: { status: "completed", video: { url: "https://storage.example/video.mp4" } } })
-        .mockResolvedValueOnce({ data: new Blob() })
+        .mockResolvedValueOnce({ data: new Blob(["{\"error\":\"expired\"}"], { type: "application/json" }) })
         .mockResolvedValueOnce({ data: content });
 
     await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
         .resolves.toEqual({ status: "completed", result: { blob: content } });
     expect(axios.get).toHaveBeenNthCalledWith(3, "/api/oidc/proxy/v1/videos/video-task/content", { headers: { Authorization: "Bearer " }, responseType: "blob", signal: undefined });
+});
+
+it("falls back to the Sub2API content endpoint when the signed download rejects", async () => {
+    const content = new Blob(["video"], { type: "video/mp4" });
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { status: "completed", video: { url: "https://storage.example/video.mp4" } } })
+        .mockRejectedValueOnce(new Error("signed URL expired"))
+        .mockResolvedValueOnce({ data: content });
+
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+        .resolves.toEqual({ status: "completed", result: { blob: content } });
+    expect(axios.get).toHaveBeenNthCalledWith(3, "/api/oidc/proxy/v1/videos/video-task/content", { headers: { Authorization: "Bearer " }, responseType: "blob", signal: undefined });
+});
+
+it("rejects an invalid Sub2API content Blob", async () => {
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { status: "completed" } })
+        .mockResolvedValueOnce({ data: new Blob(["<html>access denied</html>"], { type: "text/html" }) });
+
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+        .rejects.toThrow("视频下载失败");
+});
+
+it("keeps Sub2API OpenAI queued and in-progress tasks pending, and preserves failures", async () => {
+    const task = { id: "video-task", provider: "openai" as const, model: "oidc::video-model", adapter: "sub2api" as const };
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { status: "queued" } })
+        .mockResolvedValueOnce({ data: { status: "in_progress" } })
+        .mockResolvedValueOnce({ data: { status: "failed", error: { message: "上游拒绝任务" } } });
+
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, task)).resolves.toEqual({ status: "pending" });
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, task)).resolves.toEqual({ status: "pending" });
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, task)).resolves.toEqual({ status: "failed", error: "上游拒绝任务" });
 });
 
 it("maps Sub2API xAI done, failed, and expired states", async () => {
