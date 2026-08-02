@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
-vi.mock("axios", () => ({ default: { post: vi.fn(), get: vi.fn(), isCancel: vi.fn() } }));
+vi.mock("axios", () => ({ default: { post: vi.fn(), get: vi.fn(), isCancel: vi.fn(), isAxiosError: vi.fn(() => false) } }));
 
 import axios from "axios";
 
