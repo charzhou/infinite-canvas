@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { App } from "antd";
 import axios from "axios";
 
+import { isSub2ApiChannelLinkPath } from "@/lib/sub2api-channel-link-bootstrap";
 import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
 import { usePromptSourceScheduler } from "@/hooks/use-prompt-source-scheduler";
 import { useOidcStore } from "@/stores/use-oidc-store";
@@ -47,7 +48,7 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (handledConfigParams.current) return;
-        if (window.location.pathname === "/connect/sub2api") return;
+        if (isSub2ApiChannelLinkPath(window.location.pathname)) return;
         const searchParams = new URLSearchParams(window.location.search);
         const baseUrl = searchParams.get("baseUrl") || searchParams.get("baseurl");
         const apiKey = searchParams.get("apiKey") || searchParams.get("apikey");

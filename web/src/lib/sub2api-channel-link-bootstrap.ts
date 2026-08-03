@@ -1,7 +1,11 @@
 let capturedSearch: string | undefined;
 
+export function isSub2ApiChannelLinkPath(pathname: string) {
+    return pathname.toLowerCase().replace(/\/+$/, "") === "/connect/sub2api";
+}
+
 export function bootstrapSub2ApiChannelLink() {
-    if (typeof window === "undefined" || window.location.pathname !== "/connect/sub2api") return;
+    if (typeof window === "undefined" || !isSub2ApiChannelLinkPath(window.location.pathname)) return;
     capturedSearch = window.location.search;
     const params = new URLSearchParams(capturedSearch);
     params.delete("apiKey");
