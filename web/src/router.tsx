@@ -6,6 +6,7 @@ import AssetsPage from "@/pages/assets";
 import CanvasPage from "@/pages/canvas";
 import CanvasProjectPage from "@/pages/canvas/project";
 import ConfigPage from "@/pages/config";
+import Sub2ApiConnectPage from "@/pages/connect/sub2api";
 import HomePage from "@/pages/home";
 import ImagePage from "@/pages/image";
 import NotFound from "@/pages/not-found";
@@ -31,5 +32,6 @@ export const router = createBrowserRouter([
             { path: "/config", element: <ConfigPage /> },
         ],
     },
+    { path: "/connect/sub2api", element: <Sub2ApiConnectPage /> },
     { path: "*", element: <NotFound /> },
 ]);

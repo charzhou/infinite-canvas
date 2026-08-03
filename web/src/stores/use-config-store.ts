@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
+import type { Sub2ApiChannelDescriptor } from "@/lib/sub2api-channel-link";
 
 export type ApiCallFormat = "openai" | "gemini" | "xai" | "ark";
 export type ModelCapability = "image" | "video" | "text" | "audio";
@@ -72,6 +73,7 @@ const OPENAI_BASE_URL = "https://api.openai.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
 const XAI_BASE_URL = "https://api.x.ai";
 const ARK_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3";
+export const SUB2API_GATEWAY_BASE_URL = "https://sub2api.tegical.com";
 
 export const defaultConfig: AiConfig = {
     channelMode: "local",
@@ -365,6 +367,27 @@ export function removeOidcChannel(config: AiConfig) {
     return withNormalizedChannels(config, config.channels.filter((channel) => channel.authMode !== "oidc" && channel.id !== "oidc"));
 }
 
+export function importSub2ApiChannel(
+    config: AiConfig,
+    input: { apiKey: string; descriptor: Sub2ApiChannelDescriptor; models: ChannelModel[] },
+): AiConfig {
+    const existing = config.channels.find((channel) => channel.id === input.descriptor.channelId);
+    if (existing?.authMode === "oidc") throw new Error("OIDC 渠道不能通过授权链接覆盖");
+    if (Object.entries(input.descriptor.defaults || {}).some(([capability, name]) => !input.models.some((model) => model.name === name && model.capability === capability))) throw new Error("默认模型不可用");
+    const channel = createModelChannel({
+        id: input.descriptor.channelId,
+        name: input.descriptor.name || existing?.name || "Sub2API",
+        baseUrl: SUB2API_GATEWAY_BASE_URL,
+        apiKey: input.apiKey,
+        apiFormat: "openai",
+        authMode: "manual",
+        providerId: "sub2api",
+        models: input.models,
+    });
+    const normalized = withNormalizedChannels(config, existing ? config.channels.map((item) => (item.id === channel.id ? channel : item)) : [...config.channels, channel]);
+    return applyDescriptorDefaults(normalized, input.descriptor.defaults, channel.id);
+}
+
 function withNormalizedChannels(config: AiConfig, channels: ModelChannel[]): AiConfig {
     const models = modelOptionsFromChannels(channels);
     const next = { ...config, channels, models };
@@ -379,6 +402,13 @@ function withNormalizedChannels(config: AiConfig, channels: ModelChannel[]): AiC
         textModel: pick("text", config.textModel),
         audioModel: pick("audio", config.audioModel),
     };
+}
+
+function applyDescriptorDefaults(config: AiConfig, defaults: Sub2ApiChannelDescriptor["defaults"], channelId: string): AiConfig {
+    return (["image", "video", "text", "audio"] as const).reduce((next, capability) => {
+        const model = defaults?.[capability];
+        return model ? { ...next, [`${capability}Model`]: encodeChannelModel(channelId, model) } : next;
+    }, config);
 }
 
 export function isXaiModelConfig(config: AiConfig, value = config.videoModel || config.model) {
