@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createModelChannel, removeOidcChannel, resolveModelRequestConfig, selectableModelsByCapability, type AiConfig, type ModelChannel } from "./use-config-store";
+import { createModelChannel, defaultConfig, importSub2ApiChannel, removeOidcChannel, resolveModelRequestConfig, selectableModelsByCapability, type AiConfig, type ModelChannel } from "./use-config-store";
 
 const configWithOidcGrokVideo = {
     channels: [
@@ -45,4 +45,37 @@ it("hides models from manual channels without an API key", () => {
     } as unknown as AiConfig;
 
     expect(selectableModelsByCapability(config)).toEqual(["ready::gpt-image-2", "oidc::grok-imagine-video"]);
+});
+
+it("adds a Sub2API manual channel with the fixed gateway and requested defaults", () => {
+    const result = importSub2ApiChannel(defaultConfig, { apiKey: "sk-test", descriptor: { channelId: "tenant-a", defaults: { text: "gpt-5.6-terra" } }, models: [{ name: "gpt-5.6-terra", capability: "text" }] });
+
+    expect(result.channels.find((channel) => channel.id === "tenant-a")).toMatchObject({ baseUrl: "https://sub2api.tegical.com", apiKey: "sk-test", authMode: "manual", providerId: "sub2api" });
+    expect(result.textModel).toBe("tenant-a::gpt-5.6-terra");
+});
+
+const configWithManualTenantAndOidc = {
+    ...defaultConfig,
+    channels: [
+        { id: "tenant-a", name: "旧 Tenant", baseUrl: "https://old.example", apiKey: "old-key", apiFormat: "openai", authMode: "manual", models: [{ name: "old-model", capability: "text" }] },
+        { id: "oidc", name: "受管理", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models: [{ name: "gpt-5.6-terra", capability: "text" }] },
+    ],
+} as AiConfig;
+const importInput = { apiKey: "sk-test", descriptor: { channelId: "tenant-a", name: "Tenant A" }, models: [{ name: "gpt-5.6-terra", capability: "text" as const }] };
+
+it("replaces a same-ID manual channel without touching other channels", () => {
+    const result = importSub2ApiChannel(configWithManualTenantAndOidc, importInput);
+
+    expect(result.channels.map((channel) => channel.id)).toEqual(["tenant-a", "oidc"]);
+    expect(result.channels[0].apiKey).toBe("sk-test");
+});
+
+it("rejects a same-ID OIDC channel", () => {
+    expect(() => importSub2ApiChannel(configWithOidcGrokVideo, { ...importInput, descriptor: { ...importInput.descriptor, channelId: "oidc" } })).toThrow("OIDC 渠道不能通过授权链接覆盖");
+});
+
+it("keeps the declared xAI format and Sub2API adapter after import", () => {
+    const result = importSub2ApiChannel(defaultConfig, { apiKey: "sk-test", descriptor: { channelId: "tenant-a" }, models: [{ name: "grok-imagine-video", capability: "video", apiFormat: "xai" }] });
+
+    expect(resolveModelRequestConfig(result, "tenant-a::grok-imagine-video")).toMatchObject({ apiFormat: "xai", providerId: "sub2api" });
 });
