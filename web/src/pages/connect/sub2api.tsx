@@ -3,6 +3,7 @@ import { Spin, theme } from "antd";
 import { CircleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+import { consumeSub2ApiChannelLinkSearch } from "@/lib/sub2api-channel-link-bootstrap";
 import { clearSub2ApiChannelLink, readSub2ApiChannelLink, resolveSub2ApiChannelModels } from "@/lib/sub2api-channel-link";
 import { fetchChannelModels } from "@/services/api/image";
 import { importSub2ApiChannel, SUB2API_GATEWAY_BASE_URL, useConfigStore } from "@/stores/use-config-store";
@@ -34,7 +35,7 @@ export default function Sub2ApiConnectPage() {
     useEffect(() => {
         if (handled.current) return;
         handled.current = true;
-        const sourceSearch = window.location.search;
+        const sourceSearch = consumeSub2ApiChannelLinkSearch();
         const cleanSearch = clearSub2ApiChannelLink(sourceSearch);
         window.history.replaceState(null, "", `${window.location.pathname}${cleanSearch}${window.location.hash}`);
         void importLink(sourceSearch)

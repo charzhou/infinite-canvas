@@ -79,3 +79,13 @@ it("keeps the declared xAI format and Sub2API adapter after import", () => {
 
     expect(resolveModelRequestConfig(result, "tenant-a::grok-imagine-video")).toMatchObject({ apiFormat: "xai", providerId: "sub2api" });
 });
+
+it("rejects a descriptor default that does not match the imported model capability", () => {
+    expect(() =>
+        importSub2ApiChannel(defaultConfig, {
+            apiKey: "sk-test",
+            descriptor: { channelId: "tenant-a", defaults: { video: "gpt-5.6-terra" } },
+            models: [{ name: "gpt-5.6-terra", capability: "text" }],
+        }),
+    ).toThrow("默认模型不可用");
+});

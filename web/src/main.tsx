@@ -7,8 +7,10 @@ import { RouterProvider } from "react-router-dom";
 
 import { AppProviders } from "@/components/layout/app-providers";
 import { initAnalytics } from "@/lib/analytics";
+import { bootstrapSub2ApiChannelLink } from "@/lib/sub2api-channel-link-bootstrap";
 import { router } from "@/router";
 
+bootstrapSub2ApiChannelLink();
 initAnalytics();
 
 document.body.style.fontFamily = '"SF Pro Display","SF Pro Text","PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif';

@@ -41,7 +41,7 @@ export function resolveSub2ApiChannelModels(discovered: string[], descriptor: Su
         : names.map((name) => ({ name, capability: guessCapability(name) }));
 
     if (!models.length) throw new Error("Sub2API 未返回可用模型");
-    if (Object.values(descriptor.defaults || {}).some((name) => !models.some((model) => model.name === name))) throw new Error("默认模型不可用");
+    if (Object.entries(descriptor.defaults || {}).some(([capability, name]) => !models.some((model) => model.name === name && model.capability === capability))) throw new Error("默认模型不可用");
     return models;
 }
 

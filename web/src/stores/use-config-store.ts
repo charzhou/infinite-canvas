@@ -373,6 +373,7 @@ export function importSub2ApiChannel(
 ): AiConfig {
     const existing = config.channels.find((channel) => channel.id === input.descriptor.channelId);
     if (existing?.authMode === "oidc") throw new Error("OIDC 渠道不能通过授权链接覆盖");
+    if (Object.entries(input.descriptor.defaults || {}).some(([capability, name]) => !input.models.some((model) => model.name === name && model.capability === capability))) throw new Error("默认模型不可用");
     const channel = createModelChannel({
         id: input.descriptor.channelId,
         name: input.descriptor.name || existing?.name || "Sub2API",

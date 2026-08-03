@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 
+import { bootstrapSub2ApiChannelLink } from "@/lib/sub2api-channel-link-bootstrap";
 import { fetchChannelModels } from "@/services/api/image";
 import { defaultConfig, useConfigStore } from "@/stores/use-config-store";
 import Sub2ApiConnectPage from "./sub2api";
@@ -23,6 +24,8 @@ beforeEach(() => {
 
 it("cleans the URL before importing the fetched models and redirects home", async () => {
     window.history.replaceState(null, "", validLink);
+    bootstrapSub2ApiChannelLink();
+    expect(window.location.search).toBe("");
     vi.mocked(fetchChannelModels).mockImplementation(async (channel) => {
         const searchParams = new URLSearchParams(window.location.search);
         expect(searchParams.has("apiKey")).toBe(false);
@@ -46,7 +49,10 @@ it("cleans the URL before importing the fetched models and redirects home", asyn
 
 it("does not persist a channel when model discovery rejects", async () => {
     window.history.replaceState(null, "", validLink);
-    vi.mocked(fetchChannelModels).mockRejectedValue(new Error("读取模型失败"));
+    vi.mocked(fetchChannelModels).mockImplementation(async () => {
+        expect(window.location.search).toBe("");
+        throw new Error("读取模型失败");
+    });
 
     render(
         <MemoryRouter initialEntries={[validLink]}>
