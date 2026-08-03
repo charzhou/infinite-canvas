@@ -5,6 +5,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # 待测试
 
+- Sub2API 授权链接导入：使用包含有效 `apiKey` 和 base64url 编码 `channel` 的 `/connect/sub2api` 链接打开页面，确认地址栏会立即移除两个参数，`/v1/models` 返回的模型会被导入，相同 ID 的手动渠道会被替换而其他手动渠道及 OIDC 渠道保持不变，声明的 xAI 视频模型使用正确协议；分别传入无效 API Key、无效渠道描述符和空模型列表时，不得新增或修改任何渠道，页面和提示中也不得显示 API Key。
 - 主应用：顶栏与画布工具栏不再显示 GitHub 图标或项目仓库跳转；版本更新弹窗仅显示随当前构建内嵌的版本与更新记录，不再请求 GitHub 版本文件；第三方提示词来源主页链接保持可见且可用。
 - Knative 部署：创建包含真实 OIDC 配置的 `infinite-canvas-oidc` Secret 后执行 `kubectl apply -f deploy/knative/service.yaml`，Knative Service Ready 后通过其路由域名访问站点，确认页面正常加载、刷新子路由不 404，`/api/oidc/config` 返回 `enabled: true`；Provider 回调应到达 `{PUBLIC_ORIGIN}/api/oidc/callback`，默认未配置统计变量时不加载统计脚本，配置 `ANALYTICS_GA4_ID` / `ANALYTICS_BAIDU_ID` 后重新部署应生效；无流量时应缩容到 0，再次访问可正常冷启动恢复。
 - OIDC CDN 网关：在 Knative 或 Render 部署中同时配置 `OIDC_ISSUER=https://ai.nekotech.us` 与可选的 `OIDC_GATEWAY_BASE_URL=https://sub2api.tegical.com`，确认 `/api/oidc/config` 仍返回 `enabled: true`，受限算力请求能通过加速域名完成，且未配置网关地址时会自动回退到 Issuer。

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
++ [新增] 支持通过固定 Sub2API 网关的授权链接自动验证 API Key、导入授权模型并按渠道 ID 更新本地渠道。
+
 ## v0.12.4 - 2026-08-02
 
 + [调整] OIDC 受管的 Sub2API 视频渠道改用独立协议适配，兼容当前 OpenAI Video 与 xAI Video 任务合同而不影响其他渠道。
