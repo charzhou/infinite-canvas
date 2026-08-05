@@ -55,7 +55,7 @@ afterEach(() => {
     useAgentStore.setState({ enabled: false, connected: false, messages: [], eventLogs: [], activeThreadId: "", waiting: false, sending: false, pendingTool: null });
 });
 
-it("shows an unscoped legacy Agent reply in the active thread", async () => {
+it("rejects a legacy Agent without protocol v3", async () => {
     render(
         <MemoryRouter>
             <App>
@@ -67,11 +67,9 @@ it("shows an unscoped legacy Agent reply in the active thread", async () => {
     await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
     const source = MockEventSource.instances[0];
     act(() => source.emit("hello", { ok: true, clientId: "client-1" }));
-    await waitFor(() => expect(useAgentStore.getState().connected).toBe(true));
-    await act(async () => {
-        MockEventSource.instances.at(-1)?.emit("agent_event", { type: "item.updated", item: { id: "message-1", type: "agent_message", text: "旧 Agent 的实时回复" } });
-        await Promise.resolve();
-    });
-
-    await waitFor(() => expect(useAgentStore.getState().messages).toEqual([expect.objectContaining({ role: "assistant", text: "旧 Agent 的实时回复" })]));
+    await waitFor(() => expect(useAgentStore.getState()).toEqual(expect.objectContaining({
+        enabled: false,
+        connected: false,
+        connectError: "本地 Agent 版本过旧，请重启 Canvas Agent 后重新连接",
+    })));
 });
