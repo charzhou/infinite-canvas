@@ -6,6 +6,7 @@ import "./styles/globals.css";
 import { RouterProvider } from "react-router-dom";
 
 import { AppProviders } from "@/components/layout/app-providers";
+import "@/i18n";
 import { initAnalytics } from "@/lib/analytics";
 import { bootstrapSub2ApiChannelLink } from "@/lib/sub2api-channel-link-bootstrap";
 import { router } from "@/router";

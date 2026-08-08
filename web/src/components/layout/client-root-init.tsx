@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
 import { App } from "antd";
 import axios from "axios";
+import { useTranslation } from "react-i18next";
 
 import { isSub2ApiChannelLinkPath } from "@/lib/sub2api-channel-link-bootstrap";
 import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
@@ -21,6 +22,7 @@ function takeOidcAuthorizationResult(): OidcAuthorizationResult | null {
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const handledConfigParams = useRef(false);
     const updateConfig = useConfigStore((state) => state.updateConfig);
     const config = useConfigStore((state) => state.config);
@@ -38,13 +40,13 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
             (error) => {
                 if (error.response?.headers?.["x-oidc-session-invalid"] === "1" && useOidcStore.getState().connected) {
                     useOidcStore.getState().invalidate();
-                    message.warning("受管理渠道的授权已失效，请重新连接");
+                    message.warning(t("fork.oidc.sessionInvalid"));
                 }
                 return Promise.reject(error);
             },
         );
         return () => axios.interceptors.response.eject(interceptor);
-    }, [message]);
+    }, [message, t]);
 
     useEffect(() => {
         if (handledConfigParams.current) return;
@@ -72,13 +74,13 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
                             }
                           : channel,
                   )
-                : [createModelChannel({ id: "default", name: "默认渠道", baseUrl: baseUrl || undefined, apiKey: apiKey || "" })],
+                : [createModelChannel({ id: "default", name: t("config.channels.defaultName"), baseUrl: baseUrl || undefined, apiKey: apiKey || "" })],
         );
         if (baseUrl) updateConfig("baseUrl", baseUrl);
         if (apiKey) updateConfig("apiKey", apiKey);
         openConfigDialog(false);
-        message.success("已导入本地直连配置");
-    }, [config.channels, message, openConfigDialog, updateConfig]);
+        message.success(t("config.importedDirectConfig"));
+    }, [config.channels, message, openConfigDialog, t, updateConfig]);
 
     return <>{children}</>;
 }

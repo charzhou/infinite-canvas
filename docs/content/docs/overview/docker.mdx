@@ -1,13 +1,11 @@
 ---
-title: Docker 部署
-description: 使用 Docker Compose 部署无限画布
+title: Docker Deployment
+description: Deploy Infinite Canvas with Docker Compose
 ---
 
-# Docker 部署
+# Docker Deployment
 
-如果你希望在自己的机器或服务器上运行项目，可以直接使用 Docker Compose。
-
-## 使用发布镜像
+## Use the published image
 
 ```bash
 git clone git@github.com:basketikun/infinite-canvas.git
@@ -15,23 +13,17 @@ cd infinite-canvas
 docker compose up -d
 ```
 
-启动后访问：
+Open `http://localhost:3000`.
 
-```text
-http://localhost:3000
-```
-
-## 本地构建镜像
-
-如果需要基于当前源码构建镜像：
+## Build locally
 
 ```bash
 docker compose -f docker-compose.local.yml up -d --build
 ```
 
-## OIDC 算力渠道
+## OIDC compute channel
 
-OIDC 渠道由同源 BFF 提供，GitHub Pages 等纯静态部署不能使用，仍可继续配置手动 API Key 渠道。配置以下部署变量后，应用会显示变量 `OIDC_PROVIDER_NAME` 指定的受管理渠道：
+The OIDC channel is provided by the same-origin BFF and is unavailable on purely static deployments such as GitHub Pages. Manual API key channels remain available. After configuring these deployment variables, the application displays the managed channel named by `OIDC_PROVIDER_NAME`:
 
 ```text
 OIDC_ISSUER=https://ai.nekotech.us
@@ -40,46 +32,38 @@ OIDC_CLIENT_ID=oc-example
 OIDC_CLIENT_SECRET=...
 OIDC_SESSION_KEY=...
 OIDC_PROXY_TIMEOUT_MS=600000
-OIDC_PROVIDER_NAME=Provider 名称
+OIDC_PROVIDER_NAME=Provider name
 PUBLIC_ORIGIN=https://canvas.example.com
 ```
 
-`OIDC_ISSUER` 仍然是 Provider 的规范 Issuer，用于发现、校验和令牌交换；`OIDC_GATEWAY_BASE_URL` 是可选的受限网关入口，未配置时默认回退到 `OIDC_ISSUER`。当你要走 CDN 加速时，可以保留 `OIDC_ISSUER=https://ai.nekotech.us`，再把 `OIDC_GATEWAY_BASE_URL` 配成 `https://sub2api.tegical.com`。如果在其前面挂 CDN 或反向代理，它必须透传 `Authorization: Bearer`、streaming 响应、`Range` 和二进制媒体内容，默认不要缓存已认证 API 响应。`PUBLIC_ORIGIN` 必须是 HTTPS 的公开站点地址，并在 Provider 注册精确回调地址：`{PUBLIC_ORIGIN}/api/oidc/callback`。`OIDC_SESSION_KEY` 必须是 base64url 编码的 32 字节随机密钥。`OIDC_PROXY_TIMEOUT_MS` 统一为 `600000`（10 分钟）。用户在连接前从应用内置目录选择模型，BFF 只为所选模型请求 scope；Sub2API OAuth Client 的 `allowed_llm_scopes` 必须包含相同模型 scope。更换模型需要重新授权。
+`OIDC_ISSUER` remains the provider's canonical issuer for discovery, validation, and token exchange. `OIDC_GATEWAY_BASE_URL` is an optional restricted gateway endpoint and defaults to `OIDC_ISSUER` when omitted. To use CDN acceleration, keep `OIDC_ISSUER=https://ai.nekotech.us` and set `OIDC_GATEWAY_BASE_URL=https://sub2api.tegical.com`. Any CDN or reverse proxy in front of it must pass through `Authorization: Bearer`, streaming responses, `Range`, and binary media content, and must not cache authenticated API responses by default. `PUBLIC_ORIGIN` must be the public HTTPS site URL, with the exact callback `{PUBLIC_ORIGIN}/api/oidc/callback` registered at the provider. `OIDC_SESSION_KEY` must be a base64url-encoded 32-byte random key. Set `OIDC_PROXY_TIMEOUT_MS` to `600000` (10 minutes). Users select models from the built-in catalog before connecting, and the BFF requests scopes only for those models; the Sub2API OAuth client's `allowed_llm_scopes` must contain the same model scopes. Changing models requires authorization again.
 
-## 文档站镜像
+## Documentation image
 
-文档站位于 `docs/` 目录，按带服务端能力的 Next.js standalone 应用单独构建，不打进主应用镜像。
-
-使用发布镜像：
+The documentation in `docs/` is a separate Next.js standalone application with server capabilities.
 
 ```bash
 cd docs
 docker compose up -d
 ```
 
-基于当前源码本地构建：
+To build it from the current source:
 
 ```bash
 cd docs
 docker compose -f docker-compose.local.yml up -d --build
 ```
 
-## 数据说明
+The main application container runs the Express OIDC BFF and serves the built Vite application. Canvases, My Assets, generation history, and API keys are stored in the browser by default, while prompt repositories are fetched directly by the frontend. No persistent data volume is required for this data.
 
-当前主应用镜像只启动 Next.js。画布、我的素材、生成记录和 AI API Key 默认保存在浏览器本地；第三方提示词由浏览器前端直连拉取，不需要额外挂载数据目录。
+## Optional analytics
 
-## 统计分析（可选）
+No analytics are enabled by default. A deployment can enable GA4, Baidu Analytics, or both at runtime:
 
-项目**默认不接入任何统计**：不设置下列环境变量时，页面不会加载任何统计脚本，也不会发送任何外部请求。你在自己的部署上想查看流量时，设置对应环境变量即可，无需修改代码或重新构建镜像——镜像启动时会据此生成运行期配置。
-
-统计按「每家一个独立变量」配置：**填了谁就启用谁，可同时启用多家**（例如 GA4 + 百度一起开）。仅支持 GA4 与百度，两者都只接受 ID，脚本地址由代码固定拼接，不接受任意脚本地址或内联 JS。
-
-| 变量 | 说明 |
+| Variable | Description |
 | --- | --- |
-| `ANALYTICS_GA4_ID` | Google Analytics 4 衡量 ID（`G-XXXX`） |
-| `ANALYTICS_BAIDU_ID` | 百度统计站点 ID（`hm.js?` 后面那串 hash） |
-
-在 `docker-compose.yml` 的 `environment` 中配置（文件内已附注释示例），下例同时启用 GA4 与百度：
+| `ANALYTICS_GA4_ID` | Google Analytics 4 measurement ID (`G-XXXX`) |
+| `ANALYTICS_BAIDU_ID` | Baidu site ID, the hash after `hm.js?` |
 
 ```yaml
 services:
@@ -92,17 +76,4 @@ services:
       ANALYTICS_BAIDU_ID: e8263761cc5c32f5f7a855b8203b965a
 ```
 
-或使用 `docker run`：
-
-```bash
-docker run -d -p 3000:3000 \
-  -e ANALYTICS_GA4_ID=G-XXXXXXXXXX \
-  -e ANALYTICS_BAIDU_ID=e8263761cc5c32f5f7a855b8203b965a \
-  ghcr.io/basketikun/infinite-canvas:latest
-```
-
-单页应用的路由切换会自动向所有已启用的统计上报 pageview。
-
-<Callout type="warn">
-请只在你自己的站点上配置统计 ID，不要把 ID 提交进仓库；fork 或自托管本项目的用户默认不会产生任何统计。
-</Callout>
+SPA route changes automatically report page views to enabled providers. Only configure analytics IDs on sites you control, and do not commit them to the repository.

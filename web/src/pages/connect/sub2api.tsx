@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Spin, theme } from "antd";
 import { CircleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { consumeSub2ApiChannelLinkSearch } from "@/lib/sub2api-channel-link-bootstrap";
 import { clearSub2ApiChannelLink, readSub2ApiChannelLink, resolveSub2ApiChannelModels } from "@/lib/sub2api-channel-link";
@@ -27,6 +28,7 @@ async function importLink(sourceSearch: string) {
 }
 
 export default function Sub2ApiConnectPage() {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const handled = useRef(false);
     const [status, setStatus] = useState<Status>("loading");
@@ -48,14 +50,14 @@ export default function Sub2ApiConnectPage() {
             {status === "loading" ? (
                 <div className="flex items-center gap-3 text-sm" role="status">
                     <Spin size="small" />
-                    <span>正在验证渠道授权...</span>
+                    <span>{t("fork.sub2api.verifying")}</span>
                 </div>
             ) : (
                 <div className="flex max-w-sm flex-col items-center text-center">
                     <CircleAlert aria-hidden size={32} strokeWidth={1.75} color={token.colorError} />
-                    <h1 className="mt-4 text-lg font-medium">授权失败</h1>
+                    <h1 className="mt-4 text-lg font-medium">{t("fork.sub2api.failed")}</h1>
                     <p className="mt-2 text-sm" style={{ color: token.colorTextSecondary }}>
-                        无法验证渠道授权，请返回来源页面重新发起。
+                        {t("fork.sub2api.retryHint")}
                     </p>
                 </div>
             )}

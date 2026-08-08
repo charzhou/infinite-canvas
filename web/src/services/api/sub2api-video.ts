@@ -1,5 +1,6 @@
 import axios from "axios";
 
+import i18n from "@/i18n";
 import { buildApiUrl, modelOptionName, type ModelRequestConfig } from "@/stores/use-config-store";
 import { imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
@@ -9,6 +10,8 @@ type RequestOptions = { signal?: AbortSignal };
 type VideoResponse = { id: string; status?: "queued" | "in_progress" | "completed" | "failed"; video?: { url?: string } | null; error?: { message?: string } | string | null };
 type XaiVideoTask = { request_id?: string; status?: "pending" | "done" | "failed" | "expired"; video?: { url?: string } | null; error?: { message?: string } | string | null };
 type ApiVideoResponse = VideoResponse | { code?: number | string; data?: VideoResponse | null; msg?: string; message?: string; error?: { message?: string } };
+const apiText = (key: string) => i18n.t(`apiErrors.${key}`);
+const forkVideoText = (key: string) => i18n.t(`fork.video.${key}`);
 
 export async function createSub2ApiVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
     return config.apiFormat === "xai"
@@ -33,10 +36,10 @@ async function createSub2ApiOpenAIVideoTask(config: ModelRequestConfig, model: s
             preset: "normal",
             ...(imageUrls.length ? { input_reference: imageUrls.map((image_url) => ({ type: "image", image_url })) } : {}),
         }, requestOptions(config, "application/json", options))).data);
-        if (!created.id) throw new Error("视频接口没有返回任务 ID");
+        if (!created.id) throw new Error(apiText("noVideoTaskId"));
         return { id: created.id, provider: "openai", model, adapter: "sub2api" };
     } catch (error) {
-        throw new Error(readAxiosError(error, "视频任务创建失败"));
+        throw new Error(readAxiosError(error, apiText("videoTaskCreateFailed")));
     }
 }
 
@@ -54,10 +57,10 @@ async function createSub2ApiXaiVideoTask(config: ModelRequestConfig, model: stri
             preset: "normal",
             ...(imageUrls.length === 1 ? { image: { url: imageUrls[0] } } : imageUrls.length > 1 ? { reference_images: imageUrls.map((url) => ({ url })) } : {}),
         }, requestOptions(config, "application/json", options))).data;
-        if (!created.request_id) throw new Error("xAI 视频接口没有返回任务 ID");
+        if (!created.request_id) throw new Error(forkVideoText("xaiNoTaskId"));
         return { id: created.request_id, provider: "xai", model, adapter: "sub2api" };
     } catch (error) {
-        throw new Error(readAxiosError(error, "xAI 视频任务创建失败"));
+        throw new Error(readAxiosError(error, forkVideoText("xaiTaskCreateFailed")));
     }
 }
 
@@ -65,10 +68,10 @@ async function pollSub2ApiOpenAIVideoTask(config: ModelRequestConfig, task: Vide
     try {
         const video = unwrapVideoResponse((await axios.get<ApiVideoResponse>(apiUrl(config, `/videos/${task.id}`), requestOptions(config, undefined, options))).data);
         if (video.status === "completed") return { status: "completed", result: { blob: await downloadVideoBlob(config, task, video.video?.url, options) } };
-        if (video.status === "failed") return { status: "failed", error: readError(video.error) || "视频生成失败" };
+        if (video.status === "failed") return { status: "failed", error: readError(video.error) || apiText("videoGenerationFailed") };
         return { status: "pending" };
     } catch (error) {
-        throw new Error(readAxiosError(error, "视频任务查询失败"));
+        throw new Error(readAxiosError(error, apiText("videoTaskQueryFailed")));
     }
 }
 
@@ -76,10 +79,10 @@ async function pollSub2ApiXaiVideoTask(config: ModelRequestConfig, task: VideoGe
     try {
         const state = (await axios.get<XaiVideoTask>(apiUrl(config, `/videos/${task.id}`), requestOptions(config, undefined, options))).data;
         if (state.status === "done") return { status: "completed", result: { blob: await downloadVideoBlob(config, task, state.video?.url, options) } };
-        if (state.status === "failed" || state.status === "expired") return { status: "failed", error: readError(state.error) || `xAI 视频生成${state.status === "expired" ? "超时" : "失败"}` };
+        if (state.status === "failed" || state.status === "expired") return { status: "failed", error: readError(state.error) || forkVideoText(state.status === "expired" ? "xaiGenerationExpired" : "xaiGenerationFailed") };
         return { status: "pending" };
     } catch (error) {
-        throw new Error(readAxiosError(error, "xAI 视频任务查询失败"));
+        throw new Error(readAxiosError(error, forkVideoText("xaiTaskQueryFailed")));
     }
 }
 
@@ -93,7 +96,7 @@ async function downloadVideoBlob(config: ModelRequestConfig, task: VideoGenerati
         }
     }
     const response = await axios.get<Blob>(apiUrl(config, `/videos/${task.id}/content`), { ...requestOptions(config, undefined, options), responseType: "blob" });
-    if (!(await isVideoBlob(response.data))) throw new Error("视频下载失败");
+    if (!(await isVideoBlob(response.data))) throw new Error(apiText("videoDownloadFailed"));
     return response.data;
 }
 
@@ -145,8 +148,8 @@ function gcd(left: number, right: number): number {
 
 function unwrapVideoResponse(payload: ApiVideoResponse): VideoResponse {
     if ("code" in payload && payload.code !== undefined) {
-        if (payload.code !== 0 && payload.code !== "0") throw new Error(readError(payload) || "请求失败");
-        if (!payload.data) throw new Error("接口没有返回视频任务");
+        if (payload.code !== 0 && payload.code !== "0") throw new Error(readError(payload) || apiText("requestFailed"));
+        if (!payload.data) throw new Error(apiText("noVideoTask"));
         return payload.data;
     }
     return payload;
@@ -167,10 +170,10 @@ function readError(value: unknown): string {
 }
 
 function readAxiosError(error: unknown, fallback: string) {
-    if (axios.isCancel(error)) return "请求已取消";
+    if (axios.isCancel(error)) return apiText("requestCanceled");
     if (axios.isAxiosError<{ error?: { message?: string }; msg?: string; message?: string }>(error)) {
         return readError(error.response?.data) || fallback;
     }
-    if (error instanceof DOMException && error.name === "AbortError") return "请求已取消";
+    if (error instanceof DOMException && error.name === "AbortError") return apiText("requestCanceled");
     return error instanceof Error ? readError(error.message) || error.message : fallback;
 }

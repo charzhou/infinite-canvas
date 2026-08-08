@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import i18n from "@/i18n";
 import { beginOidcAuthorization, disconnectOidc, getOidcConfig, getOidcModelCatalog, getOidcModels, getOidcSession, type OidcModel } from "@/services/api/oidc";
 import { removeOidcChannel, syncManagedOidcChannel, useConfigStore } from "@/stores/use-config-store";
 
@@ -47,7 +48,7 @@ export const useOidcStore = create<OidcState>((set, get) => ({
             }
         } catch (error) {
             removeManagedChannel();
-            set({ connected: false, modelIds: [], error: error instanceof Error ? error.message : "OIDC 状态读取失败" });
+            set({ connected: false, modelIds: [], error: error instanceof Error ? error.message : i18n.t("fork.oidc.statusReadFailed") });
         } finally {
             set({ loading: false });
         }
@@ -57,7 +58,7 @@ export const useOidcStore = create<OidcState>((set, get) => ({
         try {
             return await getOidcModelCatalog();
         } catch (error) {
-            set({ error: error instanceof Error ? error.message : "OIDC 模型目录读取失败" });
+            set({ error: error instanceof Error ? error.message : i18n.t("fork.oidc.catalogReadFailed") });
             throw error;
         } finally {
             set({ loading: false });
@@ -68,10 +69,10 @@ export const useOidcStore = create<OidcState>((set, get) => ({
         try {
             await beginOidcAuthorization(modelIds, "/config");
         } catch (error) {
-            set({ error: error instanceof Error ? error.message : "OIDC 授权发起失败", loading: false });
+            set({ error: error instanceof Error ? error.message : i18n.t("fork.oidc.authorizationStartFailed"), loading: false });
         }
     },
-    reportAuthorizationResult: (result) => set({ error: result === "invalid_scope" ? "所选模型未获此 OAuth 客户端允许，请检查 Sub2API OAuth Client 的 allowed_llm_scopes。" : "OIDC 授权失败，请重新选择模型后连接。" }),
+    reportAuthorizationResult: (result) => set({ error: i18n.t(result === "invalid_scope" ? "fork.oidc.invalidScope" : "fork.oidc.authorizationFailed") }),
     syncModels: async () => {
         set({ loading: true, error: "" });
         try {
@@ -81,7 +82,7 @@ export const useOidcStore = create<OidcState>((set, get) => ({
             set({ connected: true, modelIds: models.map((model) => model.id) });
         } catch (error) {
             removeManagedChannel();
-            set({ connected: false, modelIds: [], error: error instanceof Error ? error.message : "OIDC 模型同步失败" });
+            set({ connected: false, modelIds: [], error: error instanceof Error ? error.message : i18n.t("fork.oidc.modelSyncFailed") });
         } finally {
             set({ loading: false });
         }
@@ -93,7 +94,7 @@ export const useOidcStore = create<OidcState>((set, get) => ({
             removeManagedChannel();
             set({ connected: false, modelIds: [] });
         } catch (error) {
-            set({ error: error instanceof Error ? error.message : "OIDC 断开失败" });
+            set({ error: error instanceof Error ? error.message : i18n.t("fork.oidc.disconnectFailed") });
         } finally {
             set({ loading: false });
         }

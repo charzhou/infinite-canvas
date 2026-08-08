@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
+
+import i18n from "@/i18n";
 import type { Sub2ApiChannelDescriptor } from "@/lib/sub2api-channel-link";
 
 export type ApiCallFormat = "openai" | "gemini" | "xai" | "ark";
@@ -65,7 +67,7 @@ export type WebdavSyncConfig = {
     directory: string;
     lastSyncedAt: string;
 };
-export type ConfigTabKey = "channels" | "preferences" | "prompt-sources" | "webdav";
+export type ConfigTabKey = "channels" | "preferences" | "prompt-sources" | "webdav" | "local-storage";
 
 export const CONFIG_STORE_KEY = "infinite-canvas:ai_config_store";
 const CHANNEL_MODEL_SEPARATOR = "::";
@@ -83,7 +85,7 @@ export const defaultConfig: AiConfig = {
     channels: [
         {
             id: "default",
-            name: "默认渠道",
+            name: i18n.t("config.channels.defaultName"),
             baseUrl: OPENAI_BASE_URL,
             apiKey: "",
             apiFormat: "openai",
@@ -287,7 +289,7 @@ export function createModelChannel(channel?: Partial<ModelChannel>): ModelChanne
     const apiFormat = normalizeApiFormat(channel?.apiFormat);
     return {
         id: channel?.id?.trim() || nanoid(),
-        name: channel?.name?.trim() || "新渠道",
+        name: channel?.name?.trim() || i18n.t("config.channels.newName"),
         baseUrl: channel?.baseUrl?.trim() || defaultBaseUrlForApiFormat(apiFormat),
         apiKey: channel?.apiKey || "",
         apiFormat,
@@ -342,7 +344,7 @@ export function resolveModelChannel(config: AiConfig, value: string) {
     const decoded = decodeChannelModel(value);
     const model = decoded?.model || value;
     const matched = decoded ? config.channels.find((channel) => channel.id === decoded.channelId) : config.channels.find((channel) => channel.models.some((item) => item.name === model));
-    return matched || config.channels[0] || createModelChannel({ id: "default", name: "默认渠道", baseUrl: config.baseUrl, apiKey: config.apiKey, apiFormat: config.apiFormat, models: config.models.map(modelOptionName).map((name) => ({ name, capability: guessCapability(name) })) });
+    return matched || config.channels[0] || createModelChannel({ id: "default", name: i18n.t("config.channels.defaultName"), baseUrl: config.baseUrl, apiKey: config.apiKey, apiFormat: config.apiFormat, models: config.models.map(modelOptionName).map((name) => ({ name, capability: guessCapability(name) })) });
 }
 
 export function resolveModelRequestConfig(config: AiConfig, value: string): ModelRequestConfig {
@@ -372,8 +374,8 @@ export function importSub2ApiChannel(
     input: { apiKey: string; descriptor: Sub2ApiChannelDescriptor; models: ChannelModel[] },
 ): AiConfig {
     const existing = config.channels.find((channel) => channel.id === input.descriptor.channelId);
-    if (existing?.authMode === "oidc") throw new Error("OIDC 渠道不能通过授权链接覆盖");
-    if (Object.entries(input.descriptor.defaults || {}).some(([capability, name]) => !input.models.some((model) => model.name === name && model.capability === capability))) throw new Error("默认模型不可用");
+    if (existing?.authMode === "oidc") throw new Error(i18n.t("fork.sub2api.oidcCannotOverwrite"));
+    if (Object.entries(input.descriptor.defaults || {}).some(([capability, name]) => !input.models.some((model) => model.name === name && model.capability === capability))) throw new Error(i18n.t("fork.sub2api.defaultUnavailable"));
     const channel = createModelChannel({
         id: input.descriptor.channelId,
         name: input.descriptor.name || existing?.name || "Sub2API",
@@ -421,7 +423,7 @@ function normalizeChannels(config: AiConfig) {
         createModelChannel({
             ...channel,
             id: channel.id || (index === 0 ? "default" : `channel-${index + 1}`),
-            name: channel.name || (index === 0 ? "默认渠道" : `渠道 ${index + 1}`),
+            name: channel.name || (index === 0 ? i18n.t("config.channels.defaultName") : i18n.t("config.channels.indexedName", { index: index + 1 })),
             models: normalizeChannelModels(channel.models),
         }),
     );
@@ -429,7 +431,7 @@ function normalizeChannels(config: AiConfig) {
         channels.push(
             createModelChannel({
                 id: "default",
-                name: "默认渠道",
+                name: i18n.t("config.channels.defaultName"),
                 baseUrl: config.baseUrl || defaultConfig.baseUrl,
                 apiKey: config.apiKey || "",
                 apiFormat: config.apiFormat || defaultConfig.apiFormat,

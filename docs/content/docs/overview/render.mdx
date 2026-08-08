@@ -1,32 +1,20 @@
 ---
-title: Render 部署
-description: 使用 Render 部署无限画布
+title: Deploy on Render
+description: Deploy Infinite Canvas with Render
 ---
 
-# Render 部署
+# Deploy on Render
 
-Render 使用仓库根目录的 `render.yaml` 构建 Docker 镜像。OIDC 相关变量在 Render 控制台中以 Secret 填写：`OIDC_ISSUER`、`OIDC_GATEWAY_BASE_URL`、`OIDC_CLIENT_ID`、`OIDC_CLIENT_SECRET`、`OIDC_SESSION_KEY`、`OIDC_PROVIDER_NAME` 和 `PUBLIC_ORIGIN`；`OIDC_PROXY_TIMEOUT_MS` 固定为 `600000`（10 分钟）。
+Render builds the Docker image from the repository's root `render.yaml`. Configure the OIDC variables as secrets in the Render dashboard: `OIDC_ISSUER`, `OIDC_GATEWAY_BASE_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_SESSION_KEY`, `OIDC_PROVIDER_NAME`, and `PUBLIC_ORIGIN`. Set `OIDC_PROXY_TIMEOUT_MS` to `600000` (10 minutes).
 
-`OIDC_ISSUER` 仍然是规范 Issuer，例如 `https://ai.nekotech.us`；`OIDC_GATEWAY_BASE_URL` 是可选的受限网关入口，未配置时默认回退到 Issuer。如果你需要通过 CDN 加速算力请求，可以把它配置为 `https://sub2api.tegical.com`。如果在其前面挂 CDN 或反向代理，它必须透传 `Authorization: Bearer`、streaming 响应、`Range` 和二进制媒体内容，默认不要缓存已认证 API 响应。`PUBLIC_ORIGIN` 使用 Render 分配或绑定的 HTTPS 域名，并在 Provider 中注册精确回调 `{PUBLIC_ORIGIN}/api/oidc/callback`。用户在连接前选择模型，BFF 仅请求所选模型的 scope；Sub2API OAuth Client 仍会拒绝其 `allowed_llm_scopes` 以外的模型。更换模型会重新授权。没有这些变量时，Render 部署仍可作为手动 API Key 渠道使用。
+`OIDC_ISSUER` remains the canonical issuer, for example `https://ai.nekotech.us`. `OIDC_GATEWAY_BASE_URL` is an optional restricted gateway endpoint and defaults to the issuer when omitted. To accelerate compute requests through a CDN, set it to `https://sub2api.tegical.com`. Any CDN or reverse proxy in front of it must pass through `Authorization: Bearer`, streaming responses, `Range`, and binary media content, and must not cache authenticated API responses by default. Set `PUBLIC_ORIGIN` to the HTTPS domain assigned or attached by Render, and register the exact callback `{PUBLIC_ORIGIN}/api/oidc/callback` at the provider. Users select models before connecting, and the BFF requests scopes only for those models; the Sub2API OAuth client still rejects models outside its `allowed_llm_scopes`. Changing models starts authorization again. Without these variables, a Render deployment can still use manual API key channels.
 
-点击下面链接即可部署到 Render：
+[Deploy to Render](https://render.com/deploy?repo=https://github.com/basketikun/infinite-canvas)
 
-[部署到 Render](https://render.com/deploy?repo=https://github.com/basketikun/infinite-canvas)
+1. Select **Deploy to Render**.
+2. Sign in and connect GitHub as prompted.
+3. Confirm the deployment.
 
-## 部署步骤
+When deployment finishes, open the assigned `.onrender.com` domain.
 
-1. 点击 `Deploy to Render`。
-2. 登录 Render，并按页面提示连接 GitHub。
-3. 确认部署。
-
-部署完成后，打开 Render 分配的 `.onrender.com` 域名即可访问。
-
-## 免费版说明
-
-默认使用 Render 免费 Web Service：
-
-- 空闲约 15 分钟后会休眠，下次访问会自动唤醒。
-- 当前主应用数据默认保存在浏览器本地；第三方提示词由浏览器前端直连拉取。
-- 适合体验和演示，不适合长期保存正式数据。
-
-长期使用建议优先部署到 Vercel，或自行配置 WebDAV 同步浏览器本地数据。
+The default configuration uses Render's free Web Service. It sleeps after a period of inactivity and wakes on the next request. Application data is primarily stored in the browser, and prompt repositories are fetched by the frontend. The free tier is suitable for evaluation and demos; use Vercel or configure WebDAV for longer-term use.

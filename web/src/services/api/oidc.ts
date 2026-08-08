@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import type { ApiCallFormat, ModelCapability } from "@/stores/use-config-store";
 
 export type OidcModel = { id: string; platform: "openai" | "grok"; name: string; capability: ModelCapability; apiFormat: ApiCallFormat };
@@ -6,7 +7,7 @@ export type OidcPublicConfig = { enabled: boolean; providerName: string };
 
 async function request<T>(path: string, init?: RequestInit) {
     const response = await fetch(path, { credentials: "same-origin", ...init });
-    if (!response.ok) throw new Error(`OIDC 请求失败（${response.status}）`);
+    if (!response.ok) throw new Error(i18n.t("fork.oidc.requestFailed", { status: response.status }));
     return (await response.json()) as T;
 }
 
@@ -33,5 +34,5 @@ export async function beginOidcAuthorization(modelIds: string[], returnTo = "/co
 
 export async function disconnectOidc() {
     const response = await fetch("/api/oidc/session", { method: "DELETE", credentials: "same-origin" });
-    if (!response.ok && response.status !== 401) throw new Error(`OIDC 断开失败（${response.status}）`);
+    if (!response.ok && response.status !== 401) throw new Error(i18n.t("fork.oidc.disconnectRequestFailed", { status: response.status }));
 }

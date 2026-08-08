@@ -55,7 +55,7 @@ afterEach(() => {
     useAgentStore.setState({ enabled: false, connected: false, messages: [], eventLogs: [], activeThreadId: "", waiting: false, sending: false, pendingTool: null });
 });
 
-it("rejects a legacy Agent without protocol v3", async () => {
+it("rejects a legacy Agent without protocol v6", async () => {
     render(
         <MemoryRouter>
             <App>

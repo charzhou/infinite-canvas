@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import { type ApiCallFormat, type ChannelModel, type ModelCapability, guessCapability } from "@/stores/use-config-store";
 
 export type Sub2ApiChannelDescriptor = {
@@ -9,7 +10,7 @@ export type Sub2ApiChannelDescriptor = {
 
 const capabilities = new Set<ModelCapability>(["image", "video", "text", "audio"]);
 const apiFormats = new Set<ApiCallFormat>(["openai", "gemini", "xai", "ark"]);
-const invalidLink = () => new Error("Sub2API 授权链接无效");
+const invalidLink = () => new Error(i18n.t("fork.sub2api.invalidLink"));
 
 export function readSub2ApiChannelLink(search: string): { apiKey: string; descriptor: Sub2ApiChannelDescriptor } {
     const params = new URLSearchParams(search);
@@ -34,14 +35,14 @@ export function clearSub2ApiChannelLink(search: string) {
 
 export function resolveSub2ApiChannelModels(discovered: string[], descriptor: Sub2ApiChannelDescriptor): ChannelModel[] {
     const names = [...new Set(discovered)];
-    if (!names.length) throw new Error("Sub2API 未返回可用模型");
+    if (!names.length) throw new Error(i18n.t("fork.sub2api.noModels"));
 
     const models = descriptor.models
         ? descriptor.models.filter((model) => names.includes(model.name)).map((model) => ({ name: model.name, capability: model.capability || guessCapability(model.name), ...(model.apiFormat ? { apiFormat: model.apiFormat } : {}) }))
         : names.map((name) => ({ name, capability: guessCapability(name) }));
 
-    if (!models.length) throw new Error("Sub2API 未返回可用模型");
-    if (Object.entries(descriptor.defaults || {}).some(([capability, name]) => !models.some((model) => model.name === name && model.capability === capability))) throw new Error("默认模型不可用");
+    if (!models.length) throw new Error(i18n.t("fork.sub2api.noModels"));
+    if (Object.entries(descriptor.defaults || {}).some(([capability, name]) => !models.some((model) => model.name === name && model.capability === capability))) throw new Error(i18n.t("fork.sub2api.defaultUnavailable"));
     return models;
 }
 

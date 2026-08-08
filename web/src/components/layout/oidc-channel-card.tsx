@@ -1,5 +1,6 @@
 import { Alert, Button, Checkbox, Modal, Tag } from "antd";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { OidcModel } from "@/services/api/oidc";
 import { useOidcStore } from "@/stores/use-oidc-store";
@@ -7,6 +8,7 @@ import { useOidcStore } from "@/stores/use-oidc-store";
 type Props = { providerName?: string; enabled?: boolean; connected?: boolean };
 
 export function OidcChannelCard({ providerName, enabled, connected }: Props) {
+    const { t } = useTranslation();
     const state = useOidcStore();
     const [catalog, setCatalog] = useState<OidcModel[]>([]);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -34,23 +36,23 @@ export function OidcChannelCard({ providerName, enabled, connected }: Props) {
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <div className="text-sm font-semibold">{name}</div>
-                    <div className="mt-1 text-xs text-stone-500">{active ? "已连接，可使用受管理模型" : "连接后可使用受管理模型"}</div>
+                    <div className="mt-1 text-xs text-stone-500">{t(active ? "fork.oidc.connectedHint" : "fork.oidc.disconnectedHint")}</div>
                 </div>
                 {active ? (
                     <div className="flex gap-2">
-                        <Button size="small" loading={state.loading} onClick={() => void openModelPicker()}>更换模型</Button>
-                        <Button size="small" danger loading={state.loading} onClick={() => void state.disconnect()}>断开 {name}</Button>
+                        <Button size="small" loading={state.loading} onClick={() => void openModelPicker()}>{t("fork.oidc.changeModels")}</Button>
+                        <Button size="small" danger loading={state.loading} onClick={() => void state.disconnect()}>{t("fork.oidc.disconnectProvider", { name })}</Button>
                     </div>
                 ) : (
-                    <Button type="primary" size="small" loading={state.loading} onClick={() => void openModelPicker()}>{state.error ? `重新连接 ${name}` : `连接 ${name}`}</Button>
+                    <Button type="primary" size="small" loading={state.loading} onClick={() => void openModelPicker()}>{t(state.error ? "fork.oidc.reconnectProvider" : "fork.oidc.connectProvider", { name })}</Button>
                 )}
             </div>
             {state.error ? <Alert className="mt-3" type="error" showIcon message={state.error} /> : null}
             <Modal
                 open={pickerOpen}
-                title={`选择 ${name} 模型`}
-                okText="授权连接"
-                cancelText="取消"
+                title={t("fork.oidc.selectProviderModels", { name })}
+                okText={t("fork.oidc.authorize")}
+                cancelText={t("common.cancel")}
                 okButtonProps={{ disabled: !selectedIds.length, loading: state.loading }}
                 onCancel={() => setPickerOpen(false)}
                 onOk={beginAuthorization}
@@ -63,7 +65,7 @@ export function OidcChannelCard({ providerName, enabled, connected }: Props) {
                             onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, model.id] : current.filter((id) => id !== model.id))}
                         >
                             <span className="mr-2 text-sm">{model.name}</span>
-                            <Tag>{model.capability === "image" ? "生图" : model.capability === "video" ? "视频" : "文本"}</Tag>
+                            <Tag>{t(`config.channelEditor.capabilities.${model.capability}`)}</Tag>
                         </Checkbox>
                     ))}
                 </div>
