@@ -1,6 +1,6 @@
 export default {
     meta: {
-        title: "Infinite Canvas",
+        title: "福农AI",
         description: "An infinite canvas creation tool",
     },
     theme: { toggle: "Toggle theme" },
