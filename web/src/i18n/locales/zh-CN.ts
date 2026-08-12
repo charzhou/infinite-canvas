@@ -1,6 +1,6 @@
 export default {
     meta: {
-        title: "福农AI",
+        title: "福农AI创",
         description: "一个无限画布创作工具",
     },
     theme: { toggle: "切换主题" },
