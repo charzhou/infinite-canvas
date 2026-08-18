@@ -9,7 +9,7 @@ export type Sub2ApiChannelDescriptor = {
 };
 
 const capabilities = new Set<ModelCapability>(["image", "video", "text", "audio"]);
-const apiFormats = new Set<ApiCallFormat>(["openai", "gemini", "xai", "ark"]);
+const apiFormats = new Set<ApiCallFormat>(["openai", "gemini", "xai"]);
 const invalidLink = () => new Error(i18n.t("fork.sub2api.invalidLink"));
 
 export function readSub2ApiChannelLink(search: string): { apiKey: string; descriptor: Sub2ApiChannelDescriptor } {

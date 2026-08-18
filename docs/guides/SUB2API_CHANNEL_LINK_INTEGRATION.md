@@ -61,7 +61,7 @@ https://<Infinite Canvas 域名>/connect/sub2api?apiKey=<URL 编码的 API Key>&
 | `models` | 否 | 希望显示的模型白名单及元数据。省略时，导入 `/v1/models` 返回的全部模型并自动判断能力。不要传空数组。 |
 | `models[].name` | 是 | 非空模型 ID；同一描述符中不能重复。 |
 | `models[].capability` | 否 | `image`、`video`、`text` 或 `audio`。省略时由 Infinite Canvas 根据模型名推断。 |
-| `models[].apiFormat` | 否 | `openai`、`gemini`、`xai` 或 `ark`。例如 xAI 视频模型应显式传入 `xai`。 |
+| `models[].apiFormat` | 否 | `openai`、`gemini` 或 `xai`。例如 xAI 视频模型应显式传入 `xai`。 |
 | `defaults` | 否 | 默认模型映射，键只能是 `image`、`video`、`text`、`audio`；值必须是当前导入结果中具有对应能力的模型名。 |
 
 `models` 只是展示与协议元数据，不能扩大权限。Infinite Canvas 会将它与 `/v1/models` 的返回值取交集；描述符中的未授权模型不会导入。若交集为空、网关未返回任何模型，或默认模型不在交集内，整个导入失败。
