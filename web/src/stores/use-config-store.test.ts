@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createModelChannel, defaultConfig, importSub2ApiChannel, removeOidcChannel, resolveModelRequestConfig, selectableModelsByCapability, type AiConfig, type ModelChannel } from "./use-config-store";
+import { boolConfig, createModelChannel, defaultConfig, importSub2ApiChannel, removeOidcChannel, resolveModelRequestConfig, selectableModelsByCapability, type AiConfig, type ModelChannel } from "./use-config-store";
 
 const configWithOidcGrokVideo = {
     channels: [
@@ -18,6 +18,12 @@ const sub2ApiChannel = {
     providerId: "sub2api",
     models: [{ name: "grok-imagine-video", capability: "video", apiFormat: "xai" }],
 } satisfies ModelChannel;
+
+it("parses persisted boolean config values with a fallback", () => {
+    expect(boolConfig("true", false)).toBe(true);
+    expect(boolConfig("false", true)).toBe(false);
+    expect(boolConfig("", true)).toBe(true);
+});
 
 it("uses a model api format over the managed channel default", () => {
     expect(resolveModelRequestConfig(configWithOidcGrokVideo, "oidc::grok-imagine-video").apiFormat).toBe("xai");
