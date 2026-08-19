@@ -1,10 +1,16 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
+const { storeMediaFile, uploadMediaFile } = vi.hoisted(() => ({
+    storeMediaFile: vi.fn(async () => ({ url: "blob:stored", storageKey: "video:stored", bytes: 5, mimeType: "video/mp4" })),
+    uploadMediaFile: vi.fn(async () => ({ url: "blob:metadata", storageKey: "video:metadata", bytes: 5, mimeType: "video/mp4", width: 1280, height: 720 })),
+}));
+
 vi.mock("axios", () => ({ default: { post: vi.fn(), get: vi.fn(), isCancel: vi.fn(), isAxiosError: vi.fn(() => false) } }));
+vi.mock("@/services/file-storage", () => ({ storeMediaFile, uploadMediaFile }));
 
 import axios from "axios";
 
-import { createVideoGenerationTask, pollVideoGenerationTask, videoPollDelay, videoPollTimeoutMs } from "./video";
+import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, videoPollDelay, videoPollTimeoutMs } from "./video";
 import { defaultConfig, type AiConfig } from "@/stores/use-config-store";
 
 const oidcXaiConfig = {
@@ -36,6 +42,12 @@ it("increases pending video polling delays exponentially with a cap", () => {
 
 it("uses the same extended timeout for every video task", () => {
     expect(videoPollTimeoutMs()).toBe(1800000);
+});
+
+it("stores a completed workbench video without waiting for media metadata", async () => {
+    const result = await storeGeneratedVideo({ blob: new Blob(["video"], { type: "video/mp4" }) }, { readMetadata: false });
+
+    expect(result).toEqual({ url: "blob:stored", storageKey: "video:stored", bytes: 5, mimeType: "video/mp4" });
 });
 
 it("allows an OIDC xAI video model without a browser API key", async () => {

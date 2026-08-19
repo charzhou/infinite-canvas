@@ -7,13 +7,18 @@ const store = localforage.createInstance({ name: "infinite-canvas", storeName: "
 const objectUrls = new Map<string, string>();
 
 export async function uploadMediaFile(input: string | Blob, prefix = "file"): Promise<UploadedFile> {
+    const stored = await storeMediaFile(input, prefix);
+    const meta = stored.mimeType.startsWith("video/") ? await readVideoMeta(stored.url) : stored.mimeType.startsWith("audio/") ? await readAudioMeta(stored.url) : {};
+    return { ...stored, ...meta };
+}
+
+export async function storeMediaFile(input: string | Blob, prefix = "file"): Promise<UploadedFile> {
     const blob = typeof input === "string" ? await (await fetch(input)).blob() : input;
     const storageKey = `${prefix}:${nanoid()}`;
     await store.setItem(storageKey, blob);
     const url = URL.createObjectURL(blob);
     objectUrls.set(storageKey, url);
-    const meta = blob.type.startsWith("video/") ? await readVideoMeta(url) : blob.type.startsWith("audio/") ? await readAudioMeta(url) : {};
-    return { url, storageKey, bytes: blob.size, mimeType: blob.type || "application/octet-stream", ...meta };
+    return { url, storageKey, bytes: blob.size, mimeType: blob.type || "application/octet-stream" };
 }
 
 export async function resolveMediaUrl(storageKey?: string, fallback = "") {

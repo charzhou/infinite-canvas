@@ -316,14 +316,15 @@ export default function VideoPage() {
             for (let attempt = 0; attempt < 120; attempt += 1) {
                 const state = await pollVideoGenerationTask(configOverride || taskConfig, log.task);
                 if (state.status === "completed") {
-                    const stored = await storeGeneratedVideo(state.result);
+                    const stored = await storeGeneratedVideo(state.result, { readMetadata: false });
+                    const [requestedWidth, requestedHeight] = normalizeVideoSize(log.config.size || log.size).split("x").map(Number);
                     const nextVideo: GeneratedVideo = {
                         id: nanoid(),
                         url: stored.url,
                         storageKey: stored.storageKey,
                         durationMs: Date.now() - log.createdAt,
-                        width: stored.width || 1280,
-                        height: stored.height || 720,
+                        width: stored.width || requestedWidth || 1280,
+                        height: stored.height || requestedHeight || 720,
                         bytes: stored.bytes,
                         mimeType: stored.mimeType,
                     };

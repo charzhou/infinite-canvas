@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 
 import i18n from "@/i18n";
 import { dataUrlToFile } from "@/lib/image-utils";
-import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
+import { storeMediaFile, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { imageToDataUrl } from "@/services/image-storage";
 import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, type AiConfig, type ModelRequestConfig } from "@/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
@@ -111,11 +111,12 @@ function videoPluginResult(result: unknown): VideoGenerationResult {
     throw new Error(apiText("scriptNoVideo"));
 }
 
-export async function storeGeneratedVideo(result: VideoGenerationResult): Promise<UploadedFile> {
-    if (result.blob) return uploadMediaFile(result.blob, "video");
+export async function storeGeneratedVideo(result: VideoGenerationResult, options?: { readMetadata?: boolean }): Promise<UploadedFile> {
+    const store = options?.readMetadata === false ? storeMediaFile : uploadMediaFile;
+    if (result.blob) return store(result.blob, "video");
     if (result.url) {
         try {
-            return await uploadMediaFile(result.url, "video");
+            return await store(result.url, "video");
         } catch {
             return { url: result.url, storageKey: "", bytes: 0, mimeType: result.mimeType || "video/mp4" };
         }
