@@ -25,6 +25,8 @@ const oidcModelCatalog: OidcCatalogModel[] = [
     { id: "grok/grok-imagine-video", scope: "llm:grok:grok-imagine-video", platform: "grok", name: "grok-imagine-video", apiFormat: "xai", capability: "video" },
     { id: "grok/grok-imagine-video-1.5", scope: "llm:grok:grok-imagine-video-1.5", platform: "grok", name: "grok-imagine-video-1.5", apiFormat: "xai", capability: "video" },
     { id: "openai/gpt-image-2", scope: "llm:openai:gpt-image-2", platform: "openai", name: "gpt-image-2", apiFormat: "openai", capability: "image" },
+    { id: "openai/gpt-image-2.5-sunburst", scope: "llm:openai:gpt-image-2.5-sunburst", platform: "openai", name: "gpt-image-2.5-sunburst", apiFormat: "openai", capability: "image" },
+    { id: "openai/gpt-image-2.5-flare", scope: "llm:openai:gpt-image-2.5-flare", platform: "openai", name: "gpt-image-2.5-flare", apiFormat: "openai", capability: "image" },
     { id: "openai/seedance-2-0", scope: "llm:openai:seedance-2-0", platform: "openai", name: "seedance-2-0", apiFormat: "openai", capability: "video" },
     { id: "openai/seedance-2-0-mini", scope: "llm:openai:seedance-2-0-mini", platform: "openai", name: "seedance-2-0-mini", apiFormat: "openai", capability: "video" },
     { id: "openai/seedance-2-0-fast", scope: "llm:openai:seedance-2-0-fast", platform: "openai", name: "seedance-2-0-fast", apiFormat: "openai", capability: "video" },

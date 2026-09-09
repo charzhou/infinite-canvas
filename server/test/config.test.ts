@@ -23,6 +23,8 @@ test("loads deployment config and the static model catalog", () => {
             { name: "grok-imagine-video", apiFormat: "xai", capability: "video" },
             { name: "grok-imagine-video-1.5", apiFormat: "xai", capability: "video" },
             { name: "gpt-image-2", apiFormat: "openai", capability: "image" },
+            { name: "gpt-image-2.5-sunburst", apiFormat: "openai", capability: "image" },
+            { name: "gpt-image-2.5-flare", apiFormat: "openai", capability: "image" },
             { name: "seedance-2-0", apiFormat: "openai", capability: "video" },
             { name: "seedance-2-0-mini", apiFormat: "openai", capability: "video" },
             { name: "seedance-2-0-fast", apiFormat: "openai", capability: "video" },
@@ -63,10 +65,10 @@ test("validates granted scopes against the static model catalog", () => {
 });
 
 test("maps selected catalog IDs to exact requested scopes", () => {
-    const scopes = scopesForModelIds(["openai/gpt-image-2", "openai/seedance-2-0", "grok/grok-imagine-video"]);
+    const scopes = scopesForModelIds(["openai/gpt-image-2", "openai/gpt-image-2.5-sunburst", "openai/gpt-image-2.5-flare", "openai/seedance-2-0", "grok/grok-imagine-video"]);
 
-    assert.deepEqual(scopes, ["openid", "offline_access", "llm:openai:gpt-image-2", "llm:openai:seedance-2-0", "llm:grok:grok-imagine-video"]);
-    assert.deepEqual(scopeModels(scopes).map((model) => model.name), ["grok-imagine-video", "gpt-image-2", "seedance-2-0"]);
+    assert.deepEqual(scopes, ["openid", "offline_access", "llm:openai:gpt-image-2", "llm:openai:gpt-image-2.5-sunburst", "llm:openai:gpt-image-2.5-flare", "llm:openai:seedance-2-0", "llm:grok:grok-imagine-video"]);
+    assert.deepEqual(scopeModels(scopes).map((model) => model.name), ["grok-imagine-video", "gpt-image-2", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "seedance-2-0"]);
     assert.throws(() => scopesForModelIds(["unknown/model"]));
 });
 
