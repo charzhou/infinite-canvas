@@ -61,15 +61,27 @@ it("allows an OIDC xAI video model without a browser API key", async () => {
     );
 });
 
-it("uses the Sub2API xAI reference images field for multiple references", async () => {
+it("uses every image for Sub2API xAI multi-image reference mode", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { request_id: "video-request" } });
     const image = { id: "image-1", name: "ref.png", type: "image/png", dataUrl: "data:image/png;base64,AA==" };
 
-    await createVideoGenerationTask(oidcXaiConfig, "测试视频", [image, { ...image, id: "image-2" }]);
+    await createVideoGenerationTask({ ...oidcXaiConfig, videoMode: "reference" }, "测试视频", [image, { ...image, id: "image-2" }]);
 
     const payload = vi.mocked(axios.post).mock.lastCall?.[1];
     expect(payload).toMatchObject({ duration: 6, aspect_ratio: "16:9", resolution: "720p", reference_images: [{ url: image.dataUrl }, { url: image.dataUrl }] });
     expect(payload).not.toHaveProperty("images");
+});
+
+it("uses only the first image for Sub2API xAI first-frame mode", async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: { request_id: "video-request" } });
+    const image = { id: "image-1", name: "first.png", type: "image/png", dataUrl: "data:image/png;base64,AA==" };
+    const secondImage = { ...image, id: "image-2", dataUrl: "data:image/png;base64,BB==" };
+
+    await createVideoGenerationTask(oidcXaiConfig, "测试视频", [image, secondImage]);
+
+    const payload = vi.mocked(axios.post).mock.lastCall?.[1];
+    expect(payload).toMatchObject({ image: { url: image.dataUrl } });
+    expect(payload).not.toHaveProperty("reference_images");
 });
 
 it("uses a JSON OpenAI video payload for Sub2API", async () => {
@@ -84,15 +96,27 @@ it("uses a JSON OpenAI video payload for Sub2API", async () => {
     );
 });
 
-it("keeps generic xAI multiple reference behavior unchanged", async () => {
+it("uses every image for generic xAI multi-image reference mode", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { request_id: "video-request" } });
     const image = { id: "image-1", name: "ref.png", type: "image/png", dataUrl: "data:image/png;base64,AA==" };
 
-    await expect(createVideoGenerationTask(genericXaiConfig, "测试视频", [image, { ...image, id: "image-2" }])).resolves.toEqual({ id: "video-request", provider: "xai", model: "oidc::grok-imagine-video" });
+    await expect(createVideoGenerationTask({ ...genericXaiConfig, videoMode: "reference" }, "测试视频", [image, { ...image, id: "image-2" }])).resolves.toEqual({ id: "video-request", provider: "xai", model: "oidc::grok-imagine-video" });
 
     const payload = vi.mocked(axios.post).mock.lastCall?.[1];
     expect(payload).toMatchObject({ images: [{ url: image.dataUrl }, { url: image.dataUrl }] });
     expect(payload).not.toHaveProperty("reference_images");
+});
+
+it("uses only the first image for generic xAI first-frame mode", async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: { request_id: "video-request" } });
+    const image = { id: "image-1", name: "first.png", type: "image/png", dataUrl: "data:image/png;base64,AA==" };
+    const secondImage = { ...image, id: "image-2", dataUrl: "data:image/png;base64,BB==" };
+
+    await createVideoGenerationTask(genericXaiConfig, "测试视频", [image, secondImage]);
+
+    const payload = vi.mocked(axios.post).mock.lastCall?.[1];
+    expect(payload).toMatchObject({ image: { url: image.dataUrl } });
+    expect(payload).not.toHaveProperty("images");
 });
 
 it("downloads a completed Sub2API OpenAI video from its signed URL without gateway credentials", async () => {

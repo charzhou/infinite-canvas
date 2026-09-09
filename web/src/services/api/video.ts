@@ -203,7 +203,8 @@ async function pollOpenAIVideoTask(config: AiConfig, task: VideoGenerationTask, 
 }
 
 async function createXaiVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
-    const imageUrls = await Promise.all(references.map((image) => imageToDataUrl(image)));
+    const selected = config.videoMode === "reference" ? references : references.slice(0, 1);
+    const imageUrls = await Promise.all(selected.map((image) => imageToDataUrl(image)));
     const size = normalizeVideoSize(config.size, config.vquality);
     const payload = {
         model: modelOptionName(model),

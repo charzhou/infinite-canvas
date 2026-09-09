@@ -32,7 +32,8 @@ type VideoSettingsPanelProps = {
 
 export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: VideoSettingsPanelProps) {
     const { t } = useTranslation();
-    const maxSeconds = isXaiModelConfig(config) ? 15 : VIDEO_SECONDS_MAX;
+    const xaiModel = isXaiModelConfig(config);
+    const maxSeconds = xaiModel ? 15 : VIDEO_SECONDS_MAX;
     const seconds = Math.min(Number(clampVideoSeconds(config.videoSeconds || "6")), maxSeconds);
     const videoMode = normalizeVideoModeValue(config.videoMode);
     const resolution = parseVideoResolution(config.vquality);
@@ -96,7 +97,7 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
                     <div className="grid grid-cols-2 gap-2.5">
                         {videoModeOptions.map((item) => (
                             <OptionPill key={item.value} selected={videoMode === item.value} theme={theme} onClick={() => onConfigChange("videoMode", item.value)}>
-                                {t(`settingsPanels.video.modes.${item.labelKey}`)}
+                                {t(`settingsPanels.video.modes.${xaiModel ? `${item.labelKey}Xai` : item.labelKey}`)}
                             </OptionPill>
                         ))}
                     </div>
@@ -120,8 +121,9 @@ export function videoSecondsLabel(value: string, maxSeconds = VIDEO_SECONDS_MAX)
     return `${Math.min(Number(clampVideoSeconds(value || "6")), maxSeconds)}s`;
 }
 
-export function videoModeLabel(value: string) {
-    return i18n.t(`settingsPanels.video.modes.${normalizeVideoModeValue(value)}`);
+export function videoModeLabel(value: string, xai = false) {
+    const mode = normalizeVideoModeValue(value);
+    return i18n.t(`settingsPanels.video.modes.${xai ? `${mode}Xai` : mode}`);
 }
 
 export function normalizeVideoModeValue(value: string | undefined) {

@@ -45,7 +45,8 @@ async function createSub2ApiOpenAIVideoTask(config: ModelRequestConfig, model: s
 
 async function createSub2ApiXaiVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
     try {
-        const imageUrls = await Promise.all(references.map((image) => imageToDataUrl(image)));
+        const selected = config.videoMode === "reference" ? references : references.slice(0, 1);
+        const imageUrls = await Promise.all(selected.map((image) => imageToDataUrl(image)));
         const size = normalizeVideoSize(config.size);
         const [width, height] = size.split("x");
         const created = (await axios.post<XaiVideoTask>(apiUrl(config, "/videos/generations"), {
