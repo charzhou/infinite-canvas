@@ -90,9 +90,9 @@ The Simplified Chinese version contains the complete upstream item-by-item accep
 ## OIDC Compute Channel
 
 - Sub2API managed video channels: OpenAI Video models should call `/v1/videos` with JSON, while xAI models should call `/v1/videos/generations`, using `image` for First frame and `reference_images` for Multi-image reference; request formats for ordinary manual OpenAI and xAI channels must remain unchanged. Completed tasks from both protocols should be downloaded as local media assets, and unfinished tasks should keep polling with the protocol captured when they were created after a refresh.
-- OIDC model catalog: authorize while disconnected with `seedance-2-0-fast` selected, verify that the provider OAuth client's `allowed_llm_scopes` contains `llm:openai:seedance-2-0-fast`, and verify that the connected channel can use it as an OpenAI-format video model.
+- OIDC model catalog: authorize while disconnected with `seedance-2.0-fast` selected, verify that the provider OAuth client's `allowed_llm_scopes` contains `llm:openai:seedance-2.0-fast`, and verify that the connected channel can use it as an OpenAI-format video model.
 - Complete browser authorization through both the provider account-authorization path and the API-key-only approval path.
-- Generate content with `gpt-5.6-terra`, `gpt-image-2`, both Grok image aliases, both Grok video aliases, `seedance-2-0`, and `seedance-2-0-mini`.
+- Generate content with `gpt-5.6-terra`, `gpt-image-2`, both Grok image aliases, both Grok video aliases, `seedance-2.0`, and `seedance-2.0-mini`.
 - Selecting a managed Grok video model on the canvas should not require a browser API key.
 - Grok video creation should reach `/v1/videos/generations` through the restricted proxy without returning `oidc_proxy_not_found`.
 - xAI video reference modes: First frame should send only the first selected image even when more are attached; Multi-image reference should send every attached image through `images` for generic channels and `reference_images` for Sub2API.
