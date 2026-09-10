@@ -16,6 +16,7 @@ vi.mock("@/services/image-storage", async () => {
 
 import axios from "axios";
 
+import { isSeedanceModel } from "./sub2api-video";
 import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, videoPollDelay, videoPollTimeoutMs } from "./video";
 import { defaultConfig, type AiConfig } from "@/stores/use-config-store";
 
@@ -32,6 +33,10 @@ const sub2ApiOpenAiConfig = {
     videoModel: "oidc::video-model",
     channels: [{ id: "oidc", name: "Sub2API", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models: [{ name: "video-model", capability: "video" }] }],
 } as AiConfig;
+
+it("treats Seedance 2.5 as a Sub2API Seedance model", () => {
+    expect(isSeedanceModel("seedance-2.5")).toBe(true);
+});
 
 const sub2ApiSeedanceConfig = {
     ...defaultConfig,

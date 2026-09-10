@@ -123,9 +123,9 @@ description: 当前版本已实现但仍需人工验证的变更项
 ## OIDC 算力渠道
 
 - Sub2API 受管理视频渠道：Seedance 模型应以沧元 JSON 字段调用 `/v1/videos`，包括 `duration`、`aspect_ratio`、`resolution`、`generate_audio`、首尾帧字段或多图参考字段，以及参考视频和音频；本地素材先上传到 `/v1/files` 后以 `{file_id}` 对象发送，公网 HTTPS 地址继续按字符串发送。其他 OpenAI Video 模型继续使用 `seconds`、`size` 和 `input_reference`。创建成功后只保存网关 `id`，完成结果依次读取 `video.url`、`data[0].url` 和 `/content`。刷新后，画布未完成任务应按保存的 provider 和 adapter 继续查询；轮询从 5 秒开始退避，单次最多 30 秒，总计最多等待 30 分钟。xAI 模型继续调用 `/v1/videos/generations` 并使用 `image` 或 `reference_images`。
-- OIDC 授权模型目录：在未连接状态选择 `seedance-2.0-fast` 后完成授权，确认 Provider OAuth Client 的 `allowed_llm_scopes` 包含 `llm:openai:seedance-2.0-fast`，且已连接渠道可将其作为 OpenAI 格式视频模型使用。
+- OIDC 授权模型目录：在未连接状态选择 `seedance-2.0-fast` 或 `seedance-2.5` 后完成授权，确认 Provider OAuth Client 的 `allowed_llm_scopes` 包含对应的 `llm:openai:seedance-2.0-fast` 或 `llm:openai:seedance-2.5` scope，且已连接渠道可将其作为 OpenAI 格式视频模型使用。
 - 使用账户授权和仅 API Key 批准两种 Provider 路径完成浏览器授权。
-- 分别使用 `gpt-5.6-terra` 文本、`gpt-image-2` 与两个 Grok 生图别名、两个 Grok 视频别名、`seedance-2.0` 和 `seedance-2.0-mini` 生成内容。
+- 分别使用 `gpt-5.6-terra` 文本、`gpt-image-2` 与两个 Grok 生图别名、两个 Grok 视频别名、`seedance-2.0`、`seedance-2.0-mini` 和 `seedance-2.5` 生成内容。
 - 在画布中选择受管理的 Grok 视频模型生成视频时，不应要求填写浏览器 API Key。
 - Grok 视频生成请求应经由受限代理到达 `/v1/videos/generations`，不返回 `oidc_proxy_not_found`。
 - xAI 视频参考模式：选择「首帧」后即使附带多张图片也只发送第一张；选择「多图参考」后应发送全部已选图片，普通渠道使用 `images`，Sub2API 使用 `reference_images`。

@@ -26,6 +26,7 @@ test("loads deployment config and the static model catalog", () => {
             { name: "gpt-image-2.5-sunburst", apiFormat: "openai", capability: "image" },
             { name: "gpt-image-2.5-flare", apiFormat: "openai", capability: "image" },
             { name: "seedance-2.0", apiFormat: "openai", capability: "video" },
+            { name: "seedance-2.5", apiFormat: "openai", capability: "video" },
             { name: "seedance-2.0-mini", apiFormat: "openai", capability: "video" },
             { name: "seedance-2.0-fast", apiFormat: "openai", capability: "video" },
             { name: "gpt-5.6-terra", apiFormat: "openai", capability: "text" },
@@ -65,10 +66,10 @@ test("validates granted scopes against the static model catalog", () => {
 });
 
 test("maps selected catalog IDs to exact requested scopes", () => {
-    const scopes = scopesForModelIds(["openai/gpt-image-2", "openai/gpt-image-2.5-sunburst", "openai/gpt-image-2.5-flare", "openai/seedance-2.0", "grok/grok-imagine-video"]);
+    const scopes = scopesForModelIds(["openai/gpt-image-2", "openai/gpt-image-2.5-sunburst", "openai/gpt-image-2.5-flare", "openai/seedance-2.0", "openai/seedance-2.5", "grok/grok-imagine-video"]);
 
-    assert.deepEqual(scopes, ["openid", "offline_access", "llm:openai:gpt-image-2", "llm:openai:gpt-image-2.5-sunburst", "llm:openai:gpt-image-2.5-flare", "llm:openai:seedance-2.0", "llm:grok:grok-imagine-video"]);
-    assert.deepEqual(scopeModels(scopes).map((model) => model.name), ["grok-imagine-video", "gpt-image-2", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "seedance-2.0"]);
+    assert.deepEqual(scopes, ["openid", "offline_access", "llm:openai:gpt-image-2", "llm:openai:gpt-image-2.5-sunburst", "llm:openai:gpt-image-2.5-flare", "llm:openai:seedance-2.0", "llm:openai:seedance-2.5", "llm:grok:grok-imagine-video"]);
+    assert.deepEqual(scopeModels(scopes).map((model) => model.name), ["grok-imagine-video", "gpt-image-2", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "seedance-2.0", "seedance-2.5"]);
     assert.throws(() => scopesForModelIds(["unknown/model"]));
 });
 

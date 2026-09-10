@@ -15,7 +15,7 @@ type XaiVideoTask = { request_id?: string; status?: "pending" | "done" | "failed
 type ApiVideoResponse = OpenAIVideoTask | { code?: number | string; data?: OpenAIVideoTask | null; msg?: string; message?: string; error?: { message?: string } };
 type GatewayFileResponse = { id?: string; data?: { id?: string } | null; error?: { message?: string } | string; message?: string };
 type CangyuanMediaReference = string | { file_id: string };
-const SEEDANCE_MODELS = new Set(["seedance-2.0", "seedance-2.0-mini", "seedance-2.0-fast"]);
+const SEEDANCE_MODELS = new Set(["seedance-2.0", "seedance-2.0-mini", "seedance-2.0-fast", "seedance-2.5"]);
 const apiText = (key: string) => i18n.t(`apiErrors.${key}`);
 const forkVideoText = (key: string) => i18n.t(`fork.video.${key}`);
 
