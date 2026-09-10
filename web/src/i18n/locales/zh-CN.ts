@@ -240,7 +240,7 @@ export default {
         audioUrlPlaceholder: "粘贴参考音频公网 HTTPS 地址",
         addUrl: "添加链接",
         httpsUrlRequired: "请输入可公开访问的 HTTPS 地址",
-        mediaReferenceHint: "可上传本地文件或添加公网 HTTPS 地址；Seedance 会在生成时先将本地文件上传到 Sub2API 网关。",
+        mediaReferenceHint: "可上传本地文件或添加公网 HTTPS 地址。",
         localReference: "本地",
         movePrevious: "移到前一项",
         moveNext: "移到后一项",

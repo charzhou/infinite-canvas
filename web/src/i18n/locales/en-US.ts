@@ -240,7 +240,7 @@ export default {
         audioUrlPlaceholder: "Paste a public HTTPS reference audio URL",
         addUrl: "Add URL",
         httpsUrlRequired: "Enter a publicly accessible HTTPS URL",
-        mediaReferenceHint: "Upload a local file or add a public HTTPS URL. Seedance uploads local files to the Sub2API gateway before generation.",
+        mediaReferenceHint: "Upload a local file or add a public HTTPS URL.",
         localReference: "Local",
         movePrevious: "Move to previous item",
         moveNext: "Move to next item",
