@@ -1,12 +1,12 @@
 import { type ReactNode } from "react";
-import { Slider } from "antd";
+import { Slider, Switch } from "antd";
 import { useTranslation } from "react-i18next";
 
 import i18n from "@/i18n";
 import { ImageSettingsTheme } from "@/components/image-settings-panel";
 import { type CanvasTheme } from "@/lib/canvas-theme";
 import { clampVideoSeconds, computeVideoSize, inferVideoRatio, parseVideoResolution, readVideoDimensions, VIDEO_SECONDS_MAX, VIDEO_SECONDS_MIN, videoRatioOptions } from "@/lib/media-size";
-import { isXaiModelConfig, type AiConfig } from "@/stores/use-config-store";
+import { boolConfig, isXaiModelConfig, type AiConfig } from "@/stores/use-config-store";
 
 const resolutionOptions = [
     { value: "480", label: "480p" },
@@ -102,6 +102,12 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         ))}
                     </div>
                 </SettingGroup>
+                <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs font-medium" style={{ color: theme.node.muted }}>{t("settingsPanels.video.generateAudio")}</div>
+                    <span onMouseDown={(event) => event.stopPropagation()}>
+                        <Switch size="small" checked={boolConfig(config.videoGenerateAudio, true)} onChange={(checked) => onConfigChange("videoGenerateAudio", String(checked))} />
+                    </span>
+                </div>
             </div>
         </ImageSettingsTheme>
     );

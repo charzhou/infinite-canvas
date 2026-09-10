@@ -27,6 +27,13 @@ const sub2ApiOpenAiConfig = {
     channels: [{ id: "oidc", name: "Sub2API", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models: [{ name: "video-model", capability: "video" }] }],
 } as AiConfig;
 
+const sub2ApiSeedanceConfig = {
+    ...defaultConfig,
+    model: "oidc::seedance-2.0",
+    videoModel: "oidc::seedance-2.0",
+    channels: [{ id: "oidc", name: "Sub2API", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models: [{ name: "seedance-2.0", capability: "video" }] }],
+} as AiConfig;
+
 const genericXaiConfig = {
     ...oidcXaiConfig,
     channels: [{ ...oidcXaiConfig.channels[0], providerId: undefined }],
@@ -37,7 +44,7 @@ beforeEach(() => vi.clearAllMocks());
 it("increases pending video polling delays exponentially with a cap", () => {
     expect(videoPollDelay(0)).toBe(5000);
     expect(videoPollDelay(1)).toBe(10000);
-    expect(videoPollDelay(4)).toBe(60000);
+    expect(videoPollDelay(4)).toBe(30000);
 });
 
 it("uses the same extended timeout for every video task", () => {
@@ -86,7 +93,7 @@ it("uses only the first image for Sub2API xAI first-frame mode", async () => {
 
 it("uses a JSON OpenAI video payload for Sub2API", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
-    const image = { id: "image-1", name: "ref.png", type: "image/png", dataUrl: "data:image/png;base64,AA==" };
+    const image = { id: "image-1", name: "ref.png", type: "image/png", dataUrl: "[image omitted]" };
 
     await expect(createVideoGenerationTask(sub2ApiOpenAiConfig, "测试视频", [image])).resolves.toEqual({ id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" });
     expect(axios.post).toHaveBeenCalledWith(
@@ -94,6 +101,63 @@ it("uses a JSON OpenAI video payload for Sub2API", async () => {
         { model: "video-model", prompt: "测试视频", seconds: "6", size: "1280x720", preset: "normal", input_reference: [{ type: "image", image_url: image.dataUrl }] },
         { headers: { Authorization: "Bearer ", "Content-Type": "application/json" }, signal: undefined },
     );
+});
+
+it("uses the Cangyuan JSON video payload for Sub2API Seedance", async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
+    const image = { id: "image-1", name: "ref.png", type: "image/png", dataUrl: "[image omitted]" };
+
+    await expect(createVideoGenerationTask(sub2ApiSeedanceConfig, "测试视频", [image])).resolves.toEqual({ id: "video-task", provider: "openai", model: "oidc::seedance-2.0", adapter: "sub2api" });
+    expect(axios.post).toHaveBeenCalledWith(
+        "/api/oidc/proxy/v1/videos",
+        { model: "seedance-2.0", prompt: "测试视频", duration: 6, aspect_ratio: "1:1", resolution: "720p", generate_audio: true, first_image_url: image.dataUrl },
+        { headers: { Authorization: "Bearer ", "Content-Type": "application/json" }, signal: undefined },
+    );
+});
+
+it("uses Cangyuan multi-image and frame fields for Sub2API Seedance", async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
+    const image = { id: "image-1", name: "first.png", type: "image/png", dataUrl: "[image omitted]" };
+    const secondImage = { ...image, id: "image-2", dataUrl: "[image omitted]" };
+
+    await createVideoGenerationTask(sub2ApiSeedanceConfig, "首尾帧", [image, secondImage]);
+    expect(vi.mocked(axios.post).mock.lastCall?.[1]).toMatchObject({ first_image_url: image.dataUrl, last_image_url: secondImage.dataUrl });
+
+    await createVideoGenerationTask({ ...sub2ApiSeedanceConfig, videoMode: "reference" }, "多图参考", [image, secondImage]);
+    expect(vi.mocked(axios.post).mock.lastCall?.[1]).toMatchObject({ reference_image_urls: [image.dataUrl, secondImage.dataUrl] });
+});
+
+it("omits auto aspect ratio and keeps the gateway task id for Sub2API Seedance", async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: { id: "video_gateway", task_id: "cangyuan-task" } });
+
+    await expect(createVideoGenerationTask({ ...sub2ApiSeedanceConfig, size: "auto" }, "文生视频")).resolves.toEqual({ id: "video_gateway", provider: "openai", model: "oidc::seedance-2.0", adapter: "sub2api" });
+    expect(vi.mocked(axios.post).mock.lastCall?.[1]).toEqual({ model: "seedance-2.0", prompt: "文生视频", duration: 6, resolution: "720p", generate_audio: true });
+});
+
+it("rejects a Sub2API Seedance response without a gateway task id", async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: { task_id: "cangyuan-task" } });
+
+    await expect(createVideoGenerationTask(sub2ApiSeedanceConfig, "文生视频")).rejects.toThrow("视频接口没有返回任务 ID");
+});
+
+it("sends public HTTPS media references for Sub2API Seedance", async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
+
+    await createVideoGenerationTask(sub2ApiSeedanceConfig, "参考素材", [], {
+        videos: [{ id: "v1", name: "clip.mp4", type: "video/mp4", url: "https://assets.example.com/clip.mp4" }],
+        audios: [{ id: "a1", name: "ambient.mp3", type: "audio/mpeg", url: "https://assets.example.com/ambient.mp3" }],
+    });
+    expect(vi.mocked(axios.post).mock.lastCall?.[1]).toMatchObject({
+        reference_videos: ["https://assets.example.com/clip.mp4"],
+        reference_audios: ["https://assets.example.com/ambient.mp3"],
+    });
+});
+
+it("rejects local video references for Sub2API Seedance", async () => {
+    await expect(createVideoGenerationTask(sub2ApiSeedanceConfig, "本地视频", [], {
+        videos: [{ id: "v1", name: "clip.mp4", type: "video/mp4", url: "blob:https://localhost/clip" }],
+    })).rejects.toThrow("参考视频和音频必须是公网 HTTPS 地址，本地文件暂不支持");
+    expect(axios.post).not.toHaveBeenCalled();
 });
 
 it("uses every image for generic xAI multi-image reference mode", async () => {
@@ -128,6 +192,17 @@ it("downloads a completed Sub2API OpenAI video from its signed URL without gatew
     await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
         .resolves.toEqual({ status: "completed", result: { blob: content } });
     expect(axios.get).toHaveBeenNthCalledWith(1, "/api/oidc/proxy/v1/videos/video-task", { headers: { Authorization: "Bearer " }, signal: undefined });
+    expect(axios.get).toHaveBeenNthCalledWith(2, "https://storage.example/video.mp4", { responseType: "blob", signal: undefined });
+});
+
+it("downloads a completed Sub2API Seedance video from data[0].url", async () => {
+    const content = new Blob(["video"], { type: "video/mp4" });
+    vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: { id: "video-task", status: "completed", data: [{ url: "https://storage.example/video.mp4" }] } })
+        .mockResolvedValueOnce({ data: content });
+
+    await expect(pollVideoGenerationTask(sub2ApiSeedanceConfig, { id: "video-task", provider: "openai", model: "oidc::seedance-2.0", adapter: "sub2api" }))
+        .resolves.toEqual({ status: "completed", result: { blob: content } });
     expect(axios.get).toHaveBeenNthCalledWith(2, "https://storage.example/video.mp4", { responseType: "blob", signal: undefined });
 });
 
