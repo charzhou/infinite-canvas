@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, LoaderCircle, Plus, SlidersHorizontal, Sparkles, Trash2, Upload, VideoIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, AudioLines, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, Link, LoaderCircle, Plus, SlidersHorizontal, Sparkles, Trash2, Upload, VideoIcon } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { App, Button, Checkbox, Drawer, Empty, Input, Modal, Tag, Typography } from "antd";
 import localforage from "localforage";
@@ -13,14 +13,16 @@ import { VideoSettingsPanel, normalizeVideoResolutionValue, normalizeVideoSizeVa
 import { canvasThemes } from "@/lib/canvas-theme";
 import { clampVideoSeconds } from "@/lib/media-size";
 import { formatBytes, formatDuration } from "@/lib/image-utils";
-import { deleteStoredMedia, resolveMediaUrl } from "@/services/file-storage";
+import { deleteStoredMedia, resolveMediaUrl, uploadMediaFile } from "@/services/file-storage";
 import { resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, videoPollDelay, videoPollTimeoutMs, type VideoGenerationTask } from "@/services/api/video";
+import { isSeedanceModel } from "@/services/api/sub2api-video";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
-import { boolConfig, isXaiModelConfig, modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { boolConfig, isXaiModelConfig, modelOptionLabel, resolveModelRequestConfig, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { ReferenceImage } from "@/types/image";
+import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 import i18n from "@/i18n";
 
 type GeneratedVideo = {
@@ -50,6 +52,8 @@ type GenerationLog = {
     model: string;
     config: GenerationLogConfig;
     references: ReferenceImage[];
+    videoReferences: ReferenceVideo[];
+    audioReferences: ReferenceAudio[];
     durationMs: number;
     size: string;
     resolution: string;
@@ -66,11 +70,15 @@ type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => 
 
 const LOG_STORE_KEY = "infinite-canvas:video_generation_logs";
 const logStore = localforage.createInstance({ name: "infinite-canvas", storeName: "video_generation_logs" });
+const MAX_MEDIA_REFERENCES = 3;
+type ReferenceMedia = ReferenceVideo | ReferenceAudio;
 
 export default function VideoPage() {
     const { message } = App.useApp();
     const { t } = useTranslation();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const videoInputRef = useRef<HTMLInputElement>(null);
+    const audioInputRef = useRef<HTMLInputElement>(null);
     const dragDepthRef = useRef(0);
     const activeLogIdsRef = useRef<Set<string>>(new Set());
     const config = useConfigStore((state) => state.config);
@@ -81,6 +89,10 @@ export default function VideoPage() {
     const addAsset = useAssetStore((state) => state.addAsset);
     const [prompt, setPrompt] = useState("");
     const [references, setReferences] = useState<ReferenceImage[]>([]);
+    const [videoReferences, setVideoReferences] = useState<ReferenceVideo[]>([]);
+    const [audioReferences, setAudioReferences] = useState<ReferenceAudio[]>([]);
+    const [videoReferenceUrl, setVideoReferenceUrl] = useState("");
+    const [audioReferenceUrl, setAudioReferenceUrl] = useState("");
     const [results, setResults] = useState<GenerationResult[]>([]);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
     const [running, setRunning] = useState(false);
@@ -102,6 +114,7 @@ export default function VideoPage() {
     const agentTaskIdRef = useRef<string | undefined>(undefined);
 
     const model = effectiveConfig.videoModel || effectiveConfig.model;
+    const supportsSeedanceReferences = resolveModelRequestConfig(effectiveConfig, model).providerId === "sub2api" && isSeedanceModel(model);
     const canGenerate = Boolean(prompt.trim());
 
     useEffect(() => {
@@ -167,6 +180,39 @@ export default function VideoPage() {
             message.error(t("videoWorkbench.clipboardEmpty"));
         }
     };
+
+    const addMediaReferences = async (kind: "video" | "audio", files?: FileList | null) => {
+        const selectedFiles = Array.from(files || []);
+        const matchingFiles = selectedFiles.filter((file) => file.type.startsWith(`${kind}/`));
+        if (matchingFiles.length !== selectedFiles.length) message.warning(t("videoWorkbench.unsupportedFiles"));
+        const current = kind === "video" ? videoReferences : audioReferences;
+        const uploads = await Promise.all(
+            matchingFiles.slice(0, MAX_MEDIA_REFERENCES - current.length).map(async (file) => {
+                const media = await uploadMediaFile(file, kind);
+                return { id: nanoid(), name: file.name, type: media.mimeType, url: media.url, storageKey: media.storageKey, bytes: media.bytes, width: media.width, height: media.height, durationMs: media.durationMs };
+            }),
+        );
+        if (kind === "video") setVideoReferences((items) => [...items, ...(uploads as ReferenceVideo[])].slice(0, MAX_MEDIA_REFERENCES));
+        else setAudioReferences((items) => [...items, ...(uploads as ReferenceAudio[])].slice(0, MAX_MEDIA_REFERENCES));
+    };
+
+    const addMediaUrl = (kind: "video" | "audio") => {
+        const value = (kind === "video" ? videoReferenceUrl : audioReferenceUrl).trim();
+        if (!isPublicHttpsUrl(value)) {
+            message.error(t("videoWorkbench.httpsUrlRequired"));
+            return;
+        }
+        const current = kind === "video" ? videoReferences : audioReferences;
+        if (current.length >= MAX_MEDIA_REFERENCES) return;
+        const item = { id: nanoid(), name: mediaReferenceName(value, kind), type: "", url: value };
+        if (kind === "video") {
+            setVideoReferences((items) => [...items, item].slice(0, MAX_MEDIA_REFERENCES));
+            setVideoReferenceUrl("");
+        } else {
+            setAudioReferences((items) => [...items, item].slice(0, MAX_MEDIA_REFERENCES));
+            setAudioReferenceUrl("");
+        }
+    };
     const generate = async () => {
         const agentTaskId = agentTaskIdRef.current;
         agentTaskIdRef.current = undefined;
@@ -183,15 +229,15 @@ export default function VideoPage() {
         const batchStartedAt = performance.now();
         setStartedAt(batchStartedAt);
         try {
-            const task = await createVideoGenerationTask(snapshot.config, snapshot.text, snapshot.references);
-            const log = buildLog({ prompt: snapshot.text, model, config: snapshot.config, references: snapshot.references, durationMs: 0, status: "pending", task });
+            const task = await createVideoGenerationTask(snapshot.config, snapshot.text, snapshot.references, { videos: snapshot.videoReferences, audios: snapshot.audioReferences });
+            const log = buildLog({ prompt: snapshot.text, model, config: snapshot.config, references: snapshot.references, videoReferences: snapshot.videoReferences, audioReferences: snapshot.audioReferences, durationMs: 0, status: "pending", task });
             await saveLog(log, false);
             void pollGenerationLog(log, snapshot.config, agentTaskId);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : t("workbench.generationFailed");
             setResults([{ id: nanoid(), status: "failed", error: errorMessage }]);
             if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", successCount: 0, failCount: 1, error: errorMessage });
-            await saveLog(buildLog({ prompt: snapshot.text, model, config: snapshot.config, references: snapshot.references, durationMs: performance.now() - batchStartedAt, status: "failed", error: errorMessage }));
+            await saveLog(buildLog({ prompt: snapshot.text, model, config: snapshot.config, references: snapshot.references, videoReferences: snapshot.videoReferences, audioReferences: snapshot.audioReferences, durationMs: performance.now() - batchStartedAt, status: "failed", error: errorMessage }));
             message.error(errorMessage);
             setRunning(false);
         }
@@ -230,7 +276,7 @@ export default function VideoPage() {
             openConfigDialog(true);
             return null;
         }
-        return { text, config: buildVideoConfig(effectiveConfig, model), references: [...references] };
+        return { text, config: buildVideoConfig(effectiveConfig, model), references: [...references], videoReferences: supportsSeedanceReferences ? [...videoReferences] : [], audioReferences: supportsSeedanceReferences ? [...audioReferences] : [] };
     };
 
     const retryResult = () => {
@@ -265,6 +311,9 @@ export default function VideoPage() {
         } else if (payload.kind === "image") {
             const stored = await uploadImage(payload.dataUrl);
             setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }].slice(0, 7));
+        } else if (payload.kind === "video" && supportsSeedanceReferences) {
+            const url = await resolveMediaUrl(payload.storageKey, payload.url);
+            setVideoReferences((value) => [...value, { id: nanoid(), name: payload.title, type: "video/mp4", url, storageKey: payload.storageKey, width: payload.width, height: payload.height }].slice(0, MAX_MEDIA_REFERENCES));
         }
         setAssetPickerOpen(false);
     };
@@ -272,6 +321,10 @@ export default function VideoPage() {
     const createSession = () => {
         setPrompt("");
         setReferences([]);
+        setVideoReferences([]);
+        setAudioReferences([]);
+        setVideoReferenceUrl("");
+        setAudioReferenceUrl("");
         setResults([]);
         setElapsedMs(0);
         setStartedAt(0);
@@ -280,10 +333,20 @@ export default function VideoPage() {
     };
 
     const deleteSelectedLogs = () => {
+        const selectedIds = new Set(selectedLogIds);
+        const retainedMediaKeys = new Set(
+            [
+                ...videoReferences,
+                ...audioReferences,
+                ...logs.filter((log) => !selectedIds.has(log.id)).flatMap((log) => [...log.videoReferences, ...log.audioReferences]),
+            ]
+                .map((item) => item.storageKey)
+                .filter((key): key is string => Boolean(key)),
+        );
         const mediaKeys = logs
-            .filter((log) => selectedLogIds.includes(log.id))
-            .map((log) => log.video?.storageKey)
-            .filter((key): key is string => Boolean(key));
+            .filter((log) => selectedIds.has(log.id))
+            .flatMap((log) => [log.video?.storageKey, ...log.videoReferences.map((item) => item.storageKey), ...log.audioReferences.map((item) => item.storageKey)])
+            .filter((key): key is string => Boolean(key) && !retainedMediaKeys.has(key));
         void Promise.all([deleteStoredMedia(mediaKeys), ...selectedLogIds.map((id) => logStore.removeItem(id))]).then(() => refreshLogs());
         if (previewLog && selectedLogIds.includes(previewLog.id)) {
             setPreviewLog(null);
@@ -372,6 +435,8 @@ export default function VideoPage() {
         setLogsOpen(false);
         setPrompt(log.prompt);
         setReferences(log.references || []);
+        setVideoReferences(log.videoReferences || []);
+        setAudioReferences(log.audioReferences || []);
         if (log.config.videoModel || log.model) updateConfig("videoModel", log.config.videoModel || log.model);
         if (log.config.size) updateConfig("size", log.config.size);
         if (log.config.vquality) updateConfig("vquality", log.config.vquality);
@@ -455,6 +520,29 @@ export default function VideoPage() {
                                 </div>
                             </div>
 
+                            {supportsSeedanceReferences ? <>
+                            <ReferenceMediaSection
+                                kind="video"
+                                items={videoReferences}
+                                url={videoReferenceUrl}
+                                onUrlChange={setVideoReferenceUrl}
+                                onAddUrl={() => addMediaUrl("video")}
+                                onUpload={() => videoInputRef.current?.click()}
+                                onMove={(index, offset) => setVideoReferences((items) => moveListItem(items, index, offset))}
+                                onRemove={(id) => setVideoReferences((items) => items.filter((item) => item.id !== id))}
+                            />
+                            <ReferenceMediaSection
+                                kind="audio"
+                                items={audioReferences}
+                                url={audioReferenceUrl}
+                                onUrlChange={setAudioReferenceUrl}
+                                onAddUrl={() => addMediaUrl("audio")}
+                                onUpload={() => audioInputRef.current?.click()}
+                                onMove={(index, offset) => setAudioReferences((items) => moveListItem(items, index, offset))}
+                                onRemove={(id) => setAudioReferences((items) => items.filter((item) => item.id !== id))}
+                            />
+                            </> : null}
+
                             <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm dark:border-stone-800 dark:bg-stone-900 sm:hidden">
                                 <span className="truncate text-stone-500 dark:text-stone-400">
                                     {modelOptionLabel(effectiveConfig, model)} · {normalizeResolution(effectiveConfig.vquality)}p · {videoSizeLabel(effectiveConfig.size)} · {normalizeVideoSeconds(effectiveConfig.videoSeconds)}s · {videoModeLabel(effectiveConfig.videoMode, isXaiModelConfig(effectiveConfig))}
@@ -505,6 +593,28 @@ export default function VideoPage() {
                     event.target.value = "";
                 }}
             />
+            <input
+                ref={videoInputRef}
+                type="file"
+                accept="video/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                    void addMediaReferences("video", event.target.files);
+                    event.target.value = "";
+                }}
+            />
+            <input
+                ref={audioInputRef}
+                type="file"
+                accept="audio/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                    void addMediaReferences("audio", event.target.files);
+                    event.target.value = "";
+                }}
+            />
             <Drawer title={t("workbench.logs")} placement="bottom" size="large" open={logsOpen} onClose={() => setLogsOpen(false)}>
                 <LogPanel logs={logs} selectedLogIds={selectedLogIds} activeLogId={previewLog?.id} onSelectedLogIdsChange={setSelectedLogIds} onCreateSession={createSession} onDeleteSelected={() => setDeleteConfirmOpen(true)} onPreviewLog={previewGenerationLog} />
             </Drawer>
@@ -536,6 +646,51 @@ function GenerationSettings({ config, model, updateConfig, openConfigDialog }: {
                 <VideoSettingsPanel config={config} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-4" />
             </div>
         </>
+    );
+}
+
+function ReferenceMediaSection({ kind, items, url, onUrlChange, onAddUrl, onUpload, onMove, onRemove }: { kind: "video" | "audio"; items: ReferenceMedia[]; url: string; onUrlChange: (value: string) => void; onAddUrl: () => void; onUpload: () => void; onMove: (index: number, offset: number) => void; onRemove: (id: string) => void }) {
+    const { t } = useTranslation();
+    const isVideo = kind === "video";
+    const Icon = isVideo ? VideoIcon : AudioLines;
+    const label = t(isVideo ? "videoWorkbench.videoReferences" : "videoWorkbench.audioReferences");
+    return (
+        <div className="min-w-0">
+            <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-base font-semibold">{label}</span>
+                <Button size="small" icon={<Upload className="size-3.5" />} onClick={onUpload}>
+                    {t("workbench.upload")}
+                </Button>
+            </div>
+            <div className="flex gap-2">
+                <Input
+                    value={url}
+                    prefix={<Link className="size-3.5 text-stone-400" />}
+                    placeholder={t(isVideo ? "videoWorkbench.videoUrlPlaceholder" : "videoWorkbench.audioUrlPlaceholder")}
+                    onChange={(event) => onUrlChange(event.target.value)}
+                    onPressEnter={onAddUrl}
+                />
+                <Button onClick={onAddUrl} disabled={items.length >= MAX_MEDIA_REFERENCES}>
+                    {t("videoWorkbench.addUrl")}
+                </Button>
+            </div>
+            <p className="mt-1.5 text-xs text-stone-500 dark:text-stone-400">{t("videoWorkbench.mediaReferenceHint")}</p>
+            <div className="mt-2 space-y-1.5">
+                {items.map((item, index) => (
+                    <div key={item.id} className="flex min-w-0 items-center gap-2 rounded-md border border-stone-200 px-2 py-1.5 dark:border-stone-800">
+                        <Icon className="size-4 shrink-0 text-stone-500 dark:text-stone-400" />
+                        <span className="min-w-0 flex-1 truncate text-sm" title={item.url}>{item.name}</span>
+                        <Tag className="m-0 shrink-0 text-[10px]">{item.storageKey ? t("videoWorkbench.localReference") : "HTTPS"}</Tag>
+                        <div className="flex shrink-0">
+                            <Button size="small" type="text" icon={<ArrowLeft className="size-3.5" />} disabled={index <= 0} onClick={() => onMove(index, -1)} aria-label={t("videoWorkbench.movePrevious")} />
+                            <Button size="small" type="text" icon={<ArrowRight className="size-3.5" />} disabled={index >= items.length - 1} onClick={() => onMove(index, 1)} aria-label={t("videoWorkbench.moveNext")} />
+                        </div>
+                        <Button size="small" type="text" danger icon={<Trash2 className="size-3.5" />} onClick={() => onRemove(item.id)} aria-label={t(isVideo ? "videoWorkbench.removeVideo" : "videoWorkbench.removeAudio")} />
+                    </div>
+                ))}
+                {!items.length ? <div className="rounded-md border border-dashed border-stone-300 px-3 py-2 text-sm text-stone-500 dark:border-stone-700 dark:text-stone-400">{t(isVideo ? "videoWorkbench.noVideos" : "videoWorkbench.noAudio")}</div> : null}
+            </div>
+        </div>
     );
 }
 
@@ -692,6 +847,10 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
             dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl),
         })),
     );
+    const [videoReferences, audioReferences] = await Promise.all([
+        normalizeMediaReferences(log.videoReferences || []),
+        normalizeMediaReferences(log.audioReferences || []),
+    ]);
     const config = normalizeLogConfig(log);
     return {
         id: log.id || nanoid(),
@@ -702,6 +861,8 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
         model: log.model || config.videoModel || "",
         config,
         references,
+        videoReferences,
+        audioReferences,
         durationMs: log.durationMs || 0,
         size: log.size || config.size || "",
         resolution: normalizeResolution(log.resolution || config.vquality || ""),
@@ -717,6 +878,8 @@ function serializeLog(log: GenerationLog): GenerationLog {
     return {
         ...log,
         references: log.references.map((item) => ({ ...item, dataUrl: item.storageKey ? "" : item.dataUrl })),
+        videoReferences: serializeMediaReferences(log.videoReferences),
+        audioReferences: serializeMediaReferences(log.audioReferences),
         video: log.video?.storageKey ? { ...log.video, url: "" } : log.video,
     };
 }
@@ -727,6 +890,28 @@ function moveListItem<T>(items: T[], index: number, offset: number) {
     const next = [...items];
     [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
     return next;
+}
+
+async function normalizeMediaReferences<T extends ReferenceMedia>(items: T[]): Promise<T[]> {
+    return Promise.all(items.map(async (item) => (item.storageKey ? { ...item, url: await resolveMediaUrl(item.storageKey, item.url) } : item)));
+}
+
+function serializeMediaReferences<T extends ReferenceMedia>(items: T[]): T[] {
+    return items.map((item) => (item.storageKey ? { ...item, url: "" } : item));
+}
+
+function isPublicHttpsUrl(value: string) {
+    try {
+        return new URL(value).protocol === "https:";
+    } catch {
+        return false;
+    }
+}
+
+function mediaReferenceName(url: string, kind: "video" | "audio") {
+    const pathname = new URL(url).pathname;
+    const name = pathname.split("/").filter(Boolean).pop();
+    return name || `${kind}-reference`;
 }
 
 function ReferenceOrderButtons({ index, total, onMove }: { index: number; total: number; onMove: (offset: number) => void }) {
@@ -752,7 +937,7 @@ function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
     };
 }
 
-function buildLog({ prompt, model, config, references, durationMs, status, task, video, error }: { prompt: string; model: string; config: AiConfig; references: ReferenceImage[]; durationMs: number; status: GenerationLog["status"]; task?: VideoGenerationTask; video?: GeneratedVideo; error?: string }): GenerationLog {
+function buildLog({ prompt, model, config, references, videoReferences, audioReferences, durationMs, status, task, video, error }: { prompt: string; model: string; config: AiConfig; references: ReferenceImage[]; videoReferences: ReferenceVideo[]; audioReferences: ReferenceAudio[]; durationMs: number; status: GenerationLog["status"]; task?: VideoGenerationTask; video?: GeneratedVideo; error?: string }): GenerationLog {
     const logConfig = {
         model: config.model,
         videoModel: config.videoModel,
@@ -772,6 +957,8 @@ function buildLog({ prompt, model, config, references, durationMs, status, task,
         model,
         config: logConfig,
         references,
+        videoReferences,
+        audioReferences,
         durationMs,
         size: logConfig.size,
         resolution: logConfig.vquality,

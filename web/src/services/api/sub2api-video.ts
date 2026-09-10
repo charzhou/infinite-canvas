@@ -1,8 +1,10 @@
 import axios from "axios";
 
 import i18n from "@/i18n";
+import { dataUrlToFile } from "@/lib/image-utils";
+import { getMediaBlob } from "@/services/file-storage";
+import { getImageBlob, imageToDataUrl } from "@/services/image-storage";
 import { boolConfig, buildApiUrl, modelOptionName, type ModelRequestConfig } from "@/stores/use-config-store";
-import { imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 import type { VideoGenerationTask, VideoGenerationTaskState } from "./video";
@@ -11,6 +13,8 @@ type RequestOptions = { signal?: AbortSignal; videos?: ReferenceVideo[]; audios?
 type OpenAIVideoTask = { id?: string; status?: string; video?: { url?: string } | null; data?: Array<{ url?: string }> | { url?: string } | null; error?: { message?: string } | string | null };
 type XaiVideoTask = { request_id?: string; status?: "pending" | "done" | "failed" | "expired"; video?: { url?: string } | null; error?: { message?: string } | string | null };
 type ApiVideoResponse = OpenAIVideoTask | { code?: number | string; data?: OpenAIVideoTask | null; msg?: string; message?: string; error?: { message?: string } };
+type GatewayFileResponse = { id?: string; data?: { id?: string } | null; error?: { message?: string } | string; message?: string };
+type CangyuanMediaReference = string | { file_id: string };
 const SEEDANCE_MODELS = new Set(["seedance-2.0", "seedance-2.0-mini", "seedance-2.0-fast"]);
 const apiText = (key: string) => i18n.t(`apiErrors.${key}`);
 const forkVideoText = (key: string) => i18n.t(`fork.video.${key}`);
@@ -35,7 +39,7 @@ export async function pollSub2ApiVideoTask(config: ModelRequestConfig, task: Vid
 
 async function createSub2ApiSeedanceVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
     try {
-        const imageUrls = await Promise.all(references.map((image) => referenceImageUrl(image, options)));
+        const imageUrls = await Promise.all(references.map((image) => uploadImageReference(config, image, options)));
         const mode = resolveCangyuanVideoMode(config.videoMode, imageUrls.length);
         const payload: Record<string, unknown> = {
             model: modelOptionName(model),
@@ -52,8 +56,8 @@ async function createSub2ApiSeedanceVideoTask(config: ModelRequestConfig, model:
         } else if (imageUrls.length) {
             payload.reference_image_urls = imageUrls;
         }
-        const videoUrls = httpsMediaUrls(options?.videos, "httpsReferenceRequired");
-        const audioUrls = httpsMediaUrls(options?.audios, "httpsReferenceRequired");
+        const videoUrls = await uploadMediaReferences(config, options?.videos, options);
+        const audioUrls = await uploadMediaReferences(config, options?.audios, options);
         if (videoUrls.length) payload.reference_videos = videoUrls;
         if (audioUrls.length) payload.reference_audios = audioUrls;
         const created = unwrapVideoResponse((await axios.post<ApiVideoResponse>(apiUrl(config, "/videos"), payload, requestOptions(config, "application/json", options))).data);
@@ -160,16 +164,31 @@ function requestOptions(config: ModelRequestConfig, contentType: string | undefi
     return { headers: { Authorization: `Bearer ${config.apiKey}`, ...(contentType ? { "Content-Type": contentType } : {}) }, signal: options?.signal };
 }
 
-async function referenceImageUrl(image: ReferenceImage, options?: RequestOptions) {
+async function uploadImageReference(config: ModelRequestConfig, image: ReferenceImage, options?: RequestOptions): Promise<CangyuanMediaReference> {
     if (isHttpsUrl(image.url)) return image.url;
-    return imageToDataUrl(image, options);
+    const blob = image.storageKey ? await getImageBlob(image.storageKey) : image.dataUrl?.startsWith("data:") ? dataUrlToFile(image) : undefined;
+    if (!blob) throw new Error(apiText("referenceImageReadFailed"));
+    return { file_id: await uploadGatewayFile(config, blob, image.name || "reference-image", options) };
 }
 
-function httpsMediaUrls(items: Array<{ url?: string }> | undefined, errorKey: string) {
-    return (items || []).map((item) => {
-        if (!isHttpsUrl(item.url)) throw new Error(apiText(errorKey));
-        return item.url;
-    });
+async function uploadMediaReferences(config: ModelRequestConfig, items: Array<{ url?: string; storageKey?: string; name?: string }> | undefined, options?: RequestOptions): Promise<CangyuanMediaReference[]> {
+    return Promise.all((items || []).map(async (item) => {
+        if (isHttpsUrl(item.url)) return item.url;
+        if (!item.storageKey) throw new Error(apiText("localAssetReadFailed"));
+        const blob = await getMediaBlob(item.storageKey);
+        if (!blob) throw new Error(apiText("localAssetReadFailed"));
+        return { file_id: await uploadGatewayFile(config, blob, item.name || "reference-media", options) };
+    }));
+}
+
+async function uploadGatewayFile(config: ModelRequestConfig, blob: Blob, filename: string, options?: RequestOptions) {
+    const form = new FormData();
+    form.append("purpose", "user_data");
+    form.append("file", blob, filename);
+    const response = await axios.post<GatewayFileResponse>(apiUrl(config, "/files"), form, requestOptions(config, undefined, options));
+    const fileId = response.data.id || response.data.data?.id;
+    if (!fileId) throw new Error(readError(response.data) || apiText("videoTaskCreateFailed"));
+    return fileId;
 }
 
 function normalizeCangyuanSeconds(value: string) {
