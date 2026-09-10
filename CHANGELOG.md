@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.18.5 - 2026-09-11
+
++ [修复] OIDC 代理允许 Sub2API Seedance 本地参考素材上传所需的 `POST /v1/files` 路由。
+
 ## v0.18.4 - 2026-09-11
 
 + [新增] 视频创作台为 Sub2API Seedance 模型新增参考视频、参考音频管理，本地文件通过网关 Files 接口上传后以 `file_id` 发送，并随生成记录恢复。
