@@ -528,6 +528,7 @@ export default function VideoPage() {
                                 onUrlChange={setVideoReferenceUrl}
                                 onAddUrl={() => addMediaUrl("video")}
                                 onUpload={() => videoInputRef.current?.click()}
+                                onDrop={(files) => void addMediaReferences("video", files)}
                                 onMove={(index, offset) => setVideoReferences((items) => moveListItem(items, index, offset))}
                                 onRemove={(id) => setVideoReferences((items) => items.filter((item) => item.id !== id))}
                             />
@@ -538,6 +539,7 @@ export default function VideoPage() {
                                 onUrlChange={setAudioReferenceUrl}
                                 onAddUrl={() => addMediaUrl("audio")}
                                 onUpload={() => audioInputRef.current?.click()}
+                                onDrop={(files) => void addMediaReferences("audio", files)}
                                 onMove={(index, offset) => setAudioReferences((items) => moveListItem(items, index, offset))}
                                 onRemove={(id) => setAudioReferences((items) => items.filter((item) => item.id !== id))}
                             />
@@ -649,11 +651,29 @@ function GenerationSettings({ config, model, updateConfig, openConfigDialog }: {
     );
 }
 
-function ReferenceMediaSection({ kind, items, url, onUrlChange, onAddUrl, onUpload, onMove, onRemove }: { kind: "video" | "audio"; items: ReferenceMedia[]; url: string; onUrlChange: (value: string) => void; onAddUrl: () => void; onUpload: () => void; onMove: (index: number, offset: number) => void; onRemove: (id: string) => void }) {
+function ReferenceMediaSection({ kind, items, url, onUrlChange, onAddUrl, onUpload, onDrop, onMove, onRemove }: { kind: "video" | "audio"; items: ReferenceMedia[]; url: string; onUrlChange: (value: string) => void; onAddUrl: () => void; onUpload: () => void; onDrop: (files: FileList) => void; onMove: (index: number, offset: number) => void; onRemove: (id: string) => void }) {
     const { t } = useTranslation();
+    const [dragTarget, setDragTarget] = useState(false);
+    const dragDepthRef = useRef(0);
     const isVideo = kind === "video";
     const Icon = isVideo ? VideoIcon : AudioLines;
     const label = t(isVideo ? "videoWorkbench.videoReferences" : "videoWorkbench.audioReferences");
+    const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        dragDepthRef.current += 1;
+        if (event.dataTransfer.types.includes("Files")) setDragTarget(true);
+    };
+    const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (!dragDepthRef.current) setDragTarget(false);
+    };
+    const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        dragDepthRef.current = 0;
+        setDragTarget(false);
+        onDrop(event.dataTransfer.files);
+    };
     return (
         <div className="min-w-0">
             <div className="mb-2 flex items-center justify-between gap-3">
@@ -675,20 +695,28 @@ function ReferenceMediaSection({ kind, items, url, onUrlChange, onAddUrl, onUplo
                 </Button>
             </div>
             <p className="mt-1.5 text-xs text-stone-500 dark:text-stone-400">{t("videoWorkbench.mediaReferenceHint")}</p>
-            <div className="mt-2 space-y-1.5">
+            <div
+                className={`hover-scrollbar hover-scrollbar-hint mt-2 flex min-h-24 w-full min-w-0 max-w-full gap-2 overflow-x-scroll overflow-y-hidden rounded-lg border border-dashed p-2 pb-3 overscroll-x-contain transition-colors ${dragTarget ? "border-stone-900 bg-stone-100/80 dark:border-stone-100 dark:bg-stone-900/80" : "border-stone-300 dark:border-stone-700"}`}
+                onDragEnter={handleDragEnter}
+                onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "copy";
+                }}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+            >
                 {items.map((item, index) => (
-                    <div key={item.id} className="flex min-w-0 items-center gap-2 rounded-md border border-stone-200 px-2 py-1.5 dark:border-stone-800">
-                        <Icon className="size-4 shrink-0 text-stone-500 dark:text-stone-400" />
-                        <span className="min-w-0 flex-1 truncate text-sm" title={item.url}>{item.name}</span>
-                        <Tag className="m-0 shrink-0 text-[10px]">{item.storageKey ? t("videoWorkbench.localReference") : "HTTPS"}</Tag>
-                        <div className="flex shrink-0">
-                            <Button size="small" type="text" icon={<ArrowLeft className="size-3.5" />} disabled={index <= 0} onClick={() => onMove(index, -1)} aria-label={t("videoWorkbench.movePrevious")} />
-                            <Button size="small" type="text" icon={<ArrowRight className="size-3.5" />} disabled={index >= items.length - 1} onClick={() => onMove(index, 1)} aria-label={t("videoWorkbench.moveNext")} />
-                        </div>
-                        <Button size="small" type="text" danger icon={<Trash2 className="size-3.5" />} onClick={() => onRemove(item.id)} aria-label={t(isVideo ? "videoWorkbench.removeVideo" : "videoWorkbench.removeAudio")} />
+                    <div key={item.id} className="group relative size-20 shrink-0 overflow-hidden rounded-md border border-stone-200 bg-stone-100 dark:border-stone-800 dark:bg-stone-900" title={item.name || item.url}>
+                        {isVideo && item.url ? <video src={item.url} muted playsInline preload="metadata" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Icon className="size-7 text-stone-500 dark:text-stone-400" /></div>}
+                        <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{index + 1}</span>
+                        <span className="absolute inset-x-1 bottom-1 truncate rounded bg-black/60 px-1 py-0.5 text-[10px] text-white">{item.name}</span>
+                        <ReferenceOrderButtons index={index} total={items.length} onMove={(offset) => onMove(index, offset)} />
+                        <button type="button" className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded bg-black/60 text-white group-hover:flex" onClick={() => onRemove(item.id)} aria-label={t(isVideo ? "videoWorkbench.removeVideo" : "videoWorkbench.removeAudio")}>
+                            <Trash2 className="size-3.5" />
+                        </button>
                     </div>
                 ))}
-                {!items.length ? <div className="rounded-md border border-dashed border-stone-300 px-3 py-2 text-sm text-stone-500 dark:border-stone-700 dark:text-stone-400">{t(isVideo ? "videoWorkbench.noVideos" : "videoWorkbench.noAudio")}</div> : null}
+                {!items.length ? <div className="flex min-w-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">{dragTarget ? t("videoWorkbench.dropReferences") : t(isVideo ? "videoWorkbench.noVideos" : "videoWorkbench.noAudio")}</div> : null}
             </div>
         </div>
     );
