@@ -59,7 +59,7 @@ it("increases pending video polling delays exponentially with a cap", () => {
 });
 
 it("uses the same extended timeout for every video task", () => {
-    expect(videoPollTimeoutMs()).toBe(1800000);
+    expect(videoPollTimeoutMs()).toBe(3600000);
 });
 
 it("stores a completed workbench video without waiting for media metadata", async () => {

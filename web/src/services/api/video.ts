@@ -50,7 +50,7 @@ export async function requestVideoGeneration(config: AiConfig, prompt: string, r
     return waitForVideoGenerationTask(config, await createVideoGenerationTask(config, prompt, references, options), options);
 }
 
-export const VIDEO_POLL_TIMEOUT_MS = 30 * 60 * 1000;
+export const VIDEO_POLL_TIMEOUT_MS = 60 * 60 * 1000;
 
 export function videoPollDelay(attempt: number) {
     return Math.min(30_000, 5_000 * 2 ** Math.max(0, attempt));
