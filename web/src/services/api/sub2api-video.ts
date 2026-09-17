@@ -15,19 +15,19 @@ type XaiVideoTask = { request_id?: string; status?: "pending" | "done" | "failed
 type ApiVideoResponse = OpenAIVideoTask | { code?: number | string; data?: OpenAIVideoTask | null; msg?: string; message?: string; error?: { message?: string } };
 type GatewayFileResponse = { id?: string; data?: { id?: string } | null; error?: { message?: string } | string; message?: string };
 type CangyuanMediaReference = string | { file_id: string };
-const SEEDANCE_MODELS = new Set(["seedance-2.0", "seedance-2.0-mini", "seedance-2.0-fast", "seedance-2.5"]);
+const CANGYUAN_VIDEO_MODELS = new Set(["seedance-2.0", "seedance-2.0-mini", "seedance-2.0-fast", "seedance-2.5", "minimax-h3"]);
 const apiText = (key: string) => i18n.t(`apiErrors.${key}`);
 const forkVideoText = (key: string) => i18n.t(`fork.video.${key}`);
 
-export function isSeedanceModel(model: string) {
-    return SEEDANCE_MODELS.has(modelOptionName(model).toLowerCase());
+export function isCangyuanVideoModel(model: string) {
+    return CANGYUAN_VIDEO_MODELS.has(modelOptionName(model).toLowerCase());
 }
 
 export async function createSub2ApiVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
     return config.apiFormat === "xai"
         ? createSub2ApiXaiVideoTask(config, model, prompt, references, options)
-        : isSeedanceModel(model)
-            ? createSub2ApiSeedanceVideoTask(config, model, prompt, references, options)
+        : isCangyuanVideoModel(model)
+            ? createSub2ApiCangyuanVideoTask(config, model, prompt, references, options)
             : createSub2ApiOpenAIVideoTask(config, model, prompt, references, options);
 }
 
@@ -37,7 +37,7 @@ export async function pollSub2ApiVideoTask(config: ModelRequestConfig, task: Vid
         : pollSub2ApiOpenAIVideoTask(config, task, options);
 }
 
-async function createSub2ApiSeedanceVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
+async function createSub2ApiCangyuanVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
     try {
         const imageUrls = await Promise.all(references.map((image) => uploadImageReference(config, image, options)));
         const mode = resolveCangyuanVideoMode(config.videoMode, imageUrls.length);

@@ -31,6 +31,7 @@ const oidcModelCatalog: OidcCatalogModel[] = [
     { id: "openai/seedance-2.5", scope: "llm:openai:seedance-2.5", platform: "openai", name: "seedance-2.5", apiFormat: "openai", capability: "video" },
     { id: "openai/seedance-2.0-mini", scope: "llm:openai:seedance-2.0-mini", platform: "openai", name: "seedance-2.0-mini", apiFormat: "openai", capability: "video" },
     { id: "openai/seedance-2.0-fast", scope: "llm:openai:seedance-2.0-fast", platform: "openai", name: "seedance-2.0-fast", apiFormat: "openai", capability: "video" },
+    { id: "openai/minimax-h3", scope: "llm:openai:minimax-h3", platform: "openai", name: "minimax-h3", apiFormat: "openai", capability: "video" },
     { id: "openai/gpt-5.6-terra", scope: "llm:openai:gpt-5.6-terra", platform: "openai", name: "gpt-5.6-terra", apiFormat: "openai", capability: "text" },
 ];
 

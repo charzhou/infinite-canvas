@@ -16,7 +16,7 @@ vi.mock("@/services/image-storage", async () => {
 
 import axios from "axios";
 
-import { isSeedanceModel } from "./sub2api-video";
+import { isCangyuanVideoModel } from "./sub2api-video";
 import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, videoPollDelay, videoPollTimeoutMs } from "./video";
 import { defaultConfig, type AiConfig } from "@/stores/use-config-store";
 
@@ -34,8 +34,9 @@ const sub2ApiOpenAiConfig = {
     channels: [{ id: "oidc", name: "Sub2API", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models: [{ name: "video-model", capability: "video" }] }],
 } as AiConfig;
 
-it("treats Seedance 2.5 as a Sub2API Seedance model", () => {
-    expect(isSeedanceModel("seedance-2.5")).toBe(true);
+it("routes supported Sub2API models through the Cangyuan video contract", () => {
+    expect(isCangyuanVideoModel("seedance-2.5")).toBe(true);
+    expect(isCangyuanVideoModel("minimax-h3")).toBe(true);
 });
 
 const sub2ApiSeedanceConfig = {
@@ -124,6 +125,19 @@ it("uses the Cangyuan JSON video payload for Sub2API Seedance", async () => {
         { model: "seedance-2.0", prompt: "测试视频", duration: 6, aspect_ratio: "1:1", resolution: "720p", generate_audio: true, first_image_url: image.url },
         { headers: { Authorization: "Bearer ", "Content-Type": "application/json" }, signal: undefined },
     );
+});
+
+it("gives MiniMax H3 the same Sub2API Cangyuan video behavior", async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
+    const config = {
+        ...sub2ApiSeedanceConfig,
+        model: "oidc::minimax-h3",
+        videoModel: "oidc::minimax-h3",
+        channels: [{ ...sub2ApiSeedanceConfig.channels[0], models: [{ name: "minimax-h3", capability: "video" as const }] }],
+    } as AiConfig;
+
+    await expect(createVideoGenerationTask(config, "测试视频")).resolves.toEqual({ id: "video-task", provider: "openai", model: "oidc::minimax-h3", adapter: "sub2api" });
+    expect(vi.mocked(axios.post).mock.lastCall?.[1]).toEqual({ model: "minimax-h3", prompt: "测试视频", duration: 6, aspect_ratio: "1:1", resolution: "720p", generate_audio: true });
 });
 
 it("uses Cangyuan multi-image and frame fields for Sub2API Seedance", async () => {

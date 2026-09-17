@@ -16,7 +16,7 @@ import { formatBytes, formatDuration } from "@/lib/image-utils";
 import { deleteStoredMedia, resolveMediaUrl, uploadMediaFile } from "@/services/file-storage";
 import { resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, videoPollDelay, videoPollTimeoutMs, type VideoGenerationTask } from "@/services/api/video";
-import { isSeedanceModel } from "@/services/api/sub2api-video";
+import { isCangyuanVideoModel } from "@/services/api/sub2api-video";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
 import { boolConfig, isXaiModelConfig, modelOptionLabel, resolveModelRequestConfig, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
@@ -114,7 +114,7 @@ export default function VideoPage() {
     const agentTaskIdRef = useRef<string | undefined>(undefined);
 
     const model = effectiveConfig.videoModel || effectiveConfig.model;
-    const supportsSeedanceReferences = resolveModelRequestConfig(effectiveConfig, model).providerId === "sub2api" && isSeedanceModel(model);
+    const supportsCangyuanReferences = resolveModelRequestConfig(effectiveConfig, model).providerId === "sub2api" && isCangyuanVideoModel(model);
     const canGenerate = Boolean(prompt.trim());
 
     useEffect(() => {
@@ -276,7 +276,7 @@ export default function VideoPage() {
             openConfigDialog(true);
             return null;
         }
-        return { text, config: buildVideoConfig(effectiveConfig, model), references: [...references], videoReferences: supportsSeedanceReferences ? [...videoReferences] : [], audioReferences: supportsSeedanceReferences ? [...audioReferences] : [] };
+        return { text, config: buildVideoConfig(effectiveConfig, model), references: [...references], videoReferences: supportsCangyuanReferences ? [...videoReferences] : [], audioReferences: supportsCangyuanReferences ? [...audioReferences] : [] };
     };
 
     const retryResult = () => {
@@ -311,7 +311,7 @@ export default function VideoPage() {
         } else if (payload.kind === "image") {
             const stored = await uploadImage(payload.dataUrl);
             setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }].slice(0, 7));
-        } else if (payload.kind === "video" && supportsSeedanceReferences) {
+        } else if (payload.kind === "video" && supportsCangyuanReferences) {
             const url = await resolveMediaUrl(payload.storageKey, payload.url);
             setVideoReferences((value) => [...value, { id: nanoid(), name: payload.title, type: "video/mp4", url, storageKey: payload.storageKey, width: payload.width, height: payload.height }].slice(0, MAX_MEDIA_REFERENCES));
         }
@@ -520,7 +520,7 @@ export default function VideoPage() {
                                 </div>
                             </div>
 
-                            {supportsSeedanceReferences ? <>
+                            {supportsCangyuanReferences ? <>
                             <ReferenceMediaSection
                                 kind="video"
                                 items={videoReferences}
