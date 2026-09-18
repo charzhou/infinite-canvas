@@ -4,6 +4,7 @@ import { CircleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import i18n from "@/i18n";
 import { consumeSub2ApiChannelLinkSearch } from "@/lib/sub2api-channel-link-bootstrap";
 import { clearSub2ApiChannelLink, readSub2ApiChannelLink, resolveSub2ApiChannelModels } from "@/lib/sub2api-channel-link";
 import { fetchChannelModels } from "@/services/api/image";
@@ -14,9 +15,10 @@ type Status = "loading" | "failed";
 
 async function importLink(sourceSearch: string) {
     const { apiKey, descriptor } = readSub2ApiChannelLink(sourceSearch);
+    const displayName = i18n.t("fork.sub2api.displayName");
     const discovered = await fetchChannelModels({
         id: descriptor.channelId,
-        name: descriptor.name || "Sub2API",
+        name: (descriptor.name || displayName).replace(/sub2api/gi, displayName),
         baseUrl: SUB2API_GATEWAY_BASE_URL,
         apiKey,
         apiFormat: "openai",

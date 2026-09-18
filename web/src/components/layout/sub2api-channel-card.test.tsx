@@ -21,6 +21,8 @@ function renderCard() {
 
 it("keeps both Sub2API connection modes visible when OIDC is unavailable", () => {
     renderCard();
+    expect(screen.getByText("算力接入")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("Sub2API");
     expect(screen.getByRole("button", { name: "授权连接" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "使用 API Key" })).toBeInTheDocument();
 });

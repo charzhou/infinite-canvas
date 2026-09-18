@@ -78,8 +78,10 @@ export const useOidcStore = create<OidcState>((set, get) => ({
         set({ loading: true, error: "" });
         try {
             const models = await getOidcModels();
-            const { providerName } = get();
-            useConfigStore.setState((state) => ({ config: syncManagedOidcChannel(state.config, { id: "sub2api", name: providerName, baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models }) }));
+            const providerName = get().providerName;
+            const localizedName = i18n.t("fork.sub2api.displayName");
+            const displayName = (providerName || localizedName).replace(/sub2api/gi, localizedName);
+            useConfigStore.setState((state) => ({ config: syncManagedOidcChannel(state.config, { id: "sub2api", name: displayName, baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models }) }));
             set({ connected: true, modelIds: models.map((model) => model.id) });
         } catch (error) {
             set({ connected: false, modelIds: [], error: error instanceof Error ? error.message : i18n.t("fork.oidc.modelSyncFailed") });

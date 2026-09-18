@@ -23,6 +23,7 @@ export function Sub2ApiApiKeyModal({ open, onClose }: { open: boolean; onClose: 
     const [selectedNames, setSelectedNames] = useState<Set<string>>(new Set());
     const [verifying, setVerifying] = useState(false);
     const [saving, setSaving] = useState(false);
+    const displayName = t("fork.sub2api.displayName");
 
     useEffect(() => {
         if (!open) return;
@@ -41,7 +42,7 @@ export function Sub2ApiApiKeyModal({ open, onClose }: { open: boolean; onClose: 
         if (!key) return message.error(t("fork.sub2api.apiKeyRequired"));
         setVerifying(true);
         try {
-            const discovered = await fetchChannelModels({ id: SUB2API_CHANNEL_ID, name: "Sub2API", baseUrl: SUB2API_GATEWAY_BASE_URL, apiKey: key, apiFormat: "openai", authMode: "manual", providerId: "sub2api", models: [] });
+            const discovered = await fetchChannelModels({ id: SUB2API_CHANNEL_ID, name: displayName, baseUrl: SUB2API_GATEWAY_BASE_URL, apiKey: key, apiFormat: "openai", authMode: "manual", providerId: "sub2api", models: [] });
             const resolved = resolveSub2ApiChannelModels(discovered, { channelId: SUB2API_CHANNEL_ID });
             setModels(resolved);
             setSelectedNames(new Set(resolved.map((model) => model.name)));
@@ -68,7 +69,7 @@ export function Sub2ApiApiKeyModal({ open, onClose }: { open: boolean; onClose: 
         setSaving(true);
         try {
             if (current?.authMode === "oidc") await useOidcStore.getState().disconnectSession();
-            useConfigStore.setState((state) => ({ config: importSub2ApiChannel(state.config, { apiKey: apiKey.trim(), descriptor: { channelId: SUB2API_CHANNEL_ID, name: "Sub2API" }, models: selected }) }));
+            useConfigStore.setState((state) => ({ config: importSub2ApiChannel(state.config, { apiKey: apiKey.trim(), descriptor: { channelId: SUB2API_CHANNEL_ID, name: displayName }, models: selected }) }));
             message.success(t("fork.sub2api.apiKeyConnected"));
             onClose();
         } catch {

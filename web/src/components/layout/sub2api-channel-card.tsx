@@ -17,6 +17,10 @@ export function Sub2ApiChannelCard() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [pickerOpen, setPickerOpen] = useState(false);
     const [apiKeyOpen, setApiKeyOpen] = useState(false);
+    const displayName = t("fork.sub2api.displayName");
+    const visibleName = (name?: string) => (name || displayName).replace(/sub2api/gi, displayName);
+    const channelName = visibleName(current?.name);
+    const providerName = visibleName(state.providerName);
     const connectionType = current?.authMode === "oidc" ? t("fork.sub2api.oidcConnection") : current ? t("fork.sub2api.apiKeyConnection") : t("fork.sub2api.notConnected");
 
     const openModelPicker = async () => {
@@ -50,9 +54,9 @@ export function Sub2ApiChannelCard() {
         <section className="mb-4 border-b border-stone-200 pb-4 dark:border-stone-800">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
-                    <div className="text-sm font-semibold">Sub2API</div>
+                    <div className="text-sm font-semibold">{displayName}</div>
                     <div className="mt-1 truncate text-xs text-stone-500">
-                        {current ? `${connectionType} · ${current.name} · ${t("config.channels.modelCount", { count: current.models.length })}` : connectionType}
+                        {current ? `${connectionType} · ${channelName} · ${t("config.channels.modelCount", { count: current.models.length })}` : connectionType}
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -68,7 +72,7 @@ export function Sub2ApiChannelCard() {
 
             <Modal
                 open={pickerOpen}
-                title={t("fork.oidc.selectProviderModels", { name: state.providerName || "Sub2API" })}
+                title={t("fork.oidc.selectProviderModels", { name: providerName })}
                 okText={t("fork.oidc.authorize")}
                 cancelText={t("common.cancel")}
                 okButtonProps={{ disabled: !selectedIds.length, loading: state.loading }}

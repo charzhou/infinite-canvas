@@ -412,7 +412,8 @@ export function modelOptionLabel(config: AiConfig, value: string) {
     const decoded = decodeChannelModel(value);
     if (!decoded) return value;
     const channel = config.channels.find((item) => item.id === decoded.channelId);
-    return channel ? `${decoded.model}（${channel.name}）` : decoded.model;
+    const channelName = channel?.providerId === "sub2api" ? channel.name.replace(/sub2api/gi, i18n.t("fork.sub2api.displayName")) : channel?.name;
+    return channelName ? `${decoded.model}（${channelName}）` : decoded.model;
 }
 
 export function modelOptionsFromChannels(channels: ModelChannel[]) {
@@ -471,7 +472,8 @@ export function replaceSub2ApiChannel(config: AiConfig, channel: Omit<ModelChann
 
 export function importSub2ApiChannel(config: AiConfig, input: { apiKey: string; descriptor: Sub2ApiChannelDescriptor; models: ChannelModel[] }): AiConfig {
     if (Object.entries(input.descriptor.defaults || {}).some(([capability, name]) => !input.models.some((model) => model.name === name && model.capability === capability))) throw new Error(i18n.t("fork.sub2api.defaultUnavailable"));
-    const normalized = replaceSub2ApiChannel(config, { name: input.descriptor.name || "Sub2API", baseUrl: SUB2API_GATEWAY_BASE_URL, apiKey: input.apiKey, apiFormat: "openai", authMode: "manual", models: input.models });
+    const displayName = i18n.t("fork.sub2api.displayName");
+    const normalized = replaceSub2ApiChannel(config, { name: (input.descriptor.name || displayName).replace(/sub2api/gi, displayName), baseUrl: SUB2API_GATEWAY_BASE_URL, apiKey: input.apiKey, apiFormat: "openai", authMode: "manual", models: input.models });
     return applyDescriptorDefaults(normalized, input.descriptor.defaults, SUB2API_CHANNEL_ID);
 }
 
