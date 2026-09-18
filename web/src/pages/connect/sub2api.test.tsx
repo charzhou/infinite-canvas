@@ -41,7 +41,7 @@ it("cleans the URL before importing the fetched models and redirects home", asyn
         </MemoryRouter>,
     );
 
-    await waitFor(() => expect(useConfigStore.getState().config.channels.some((channel) => channel.id === "tenant-a")).toBe(true));
+    await waitFor(() => expect(useConfigStore.getState().config.channels.some((channel) => channel.id === "sub2api")).toBe(true));
     expect(window.location.search).toBe("");
     expect(fetchChannelModels).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: "https://sub2api.tegical.com" }));
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/"));

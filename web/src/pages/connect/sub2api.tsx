@@ -8,6 +8,7 @@ import { consumeSub2ApiChannelLinkSearch } from "@/lib/sub2api-channel-link-boot
 import { clearSub2ApiChannelLink, readSub2ApiChannelLink, resolveSub2ApiChannelModels } from "@/lib/sub2api-channel-link";
 import { fetchChannelModels } from "@/services/api/image";
 import { importSub2ApiChannel, SUB2API_GATEWAY_BASE_URL, useConfigStore } from "@/stores/use-config-store";
+import { useOidcStore } from "@/stores/use-oidc-store";
 
 type Status = "loading" | "failed";
 
@@ -24,6 +25,8 @@ async function importLink(sourceSearch: string) {
         models: [],
     });
     const models = resolveSub2ApiChannelModels(discovered, descriptor);
+    const current = useConfigStore.getState().config.channels.find((channel) => channel.providerId === "sub2api");
+    if (current?.authMode === "oidc") await useOidcStore.getState().disconnectSession();
     useConfigStore.setState((state) => ({ config: importSub2ApiChannel(state.config, { apiKey, descriptor, models }) }));
 }
 

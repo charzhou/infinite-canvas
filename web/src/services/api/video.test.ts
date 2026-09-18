@@ -22,16 +22,16 @@ import { defaultConfig, type AiConfig } from "@/stores/use-config-store";
 
 const oidcXaiConfig = {
     ...defaultConfig,
-    model: "oidc::grok-imagine-video",
-    videoModel: "oidc::grok-imagine-video",
-    channels: [{ id: "oidc", name: "Sub2API", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models: [{ name: "grok-imagine-video", capability: "video", apiFormat: "xai" }] }],
+    model: "sub2api::grok-imagine-video",
+    videoModel: "sub2api::grok-imagine-video",
+    channels: [{ id: "sub2api", name: "Sub2API", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models: [{ name: "grok-imagine-video", capability: "video", apiFormat: "xai" }] }],
 } as AiConfig;
 
 const sub2ApiOpenAiConfig = {
     ...defaultConfig,
-    model: "oidc::video-model",
-    videoModel: "oidc::video-model",
-    channels: [{ id: "oidc", name: "Sub2API", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models: [{ name: "video-model", capability: "video" }] }],
+    model: "sub2api::video-model",
+    videoModel: "sub2api::video-model",
+    channels: [{ id: "sub2api", name: "Sub2API", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models: [{ name: "video-model", capability: "video" }] }],
 } as AiConfig;
 
 it("routes supported Sub2API models through the Cangyuan video contract", () => {
@@ -41,9 +41,9 @@ it("routes supported Sub2API models through the Cangyuan video contract", () => 
 
 const sub2ApiSeedanceConfig = {
     ...defaultConfig,
-    model: "oidc::seedance-2.0",
-    videoModel: "oidc::seedance-2.0",
-    channels: [{ id: "oidc", name: "Sub2API", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models: [{ name: "seedance-2.0", capability: "video" }] }],
+    model: "sub2api::seedance-2.0",
+    videoModel: "sub2api::seedance-2.0",
+    channels: [{ id: "sub2api", name: "Sub2API", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models: [{ name: "seedance-2.0", capability: "video" }] }],
 } as AiConfig;
 
 const genericXaiConfig = {
@@ -107,7 +107,7 @@ it("uses a JSON OpenAI video payload for Sub2API", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
     const image = { id: "image-1", name: "ref.png", type: "image/png", dataUrl: "[image omitted]" };
 
-    await expect(createVideoGenerationTask(sub2ApiOpenAiConfig, "测试视频", [image])).resolves.toEqual({ id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" });
+    await expect(createVideoGenerationTask(sub2ApiOpenAiConfig, "测试视频", [image])).resolves.toEqual({ id: "video-task", provider: "openai", model: "sub2api::video-model", adapter: "sub2api" });
     expect(axios.post).toHaveBeenCalledWith(
         "/api/oidc/proxy/v1/videos",
         { model: "video-model", prompt: "测试视频", seconds: "6", size: "1280x720", preset: "normal", input_reference: [{ type: "image", image_url: image.dataUrl }] },
@@ -119,7 +119,7 @@ it("uses the Cangyuan JSON video payload for Sub2API Seedance", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
     const image = { id: "image-1", name: "ref.png", type: "image/png", url: "https://assets.example.com/ref.png", dataUrl: "" };
 
-    await expect(createVideoGenerationTask(sub2ApiSeedanceConfig, "测试视频", [image])).resolves.toEqual({ id: "video-task", provider: "openai", model: "oidc::seedance-2.0", adapter: "sub2api" });
+    await expect(createVideoGenerationTask(sub2ApiSeedanceConfig, "测试视频", [image])).resolves.toEqual({ id: "video-task", provider: "openai", model: "sub2api::seedance-2.0", adapter: "sub2api" });
     expect(axios.post).toHaveBeenCalledWith(
         "/api/oidc/proxy/v1/videos",
         { model: "seedance-2.0", prompt: "测试视频", duration: 6, aspect_ratio: "1:1", resolution: "720p", generate_audio: true, first_image_url: image.url },
@@ -131,12 +131,12 @@ it("gives MiniMax H3 the same Sub2API Cangyuan video behavior", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
     const config = {
         ...sub2ApiSeedanceConfig,
-        model: "oidc::minimax-h3",
-        videoModel: "oidc::minimax-h3",
+        model: "sub2api::minimax-h3",
+        videoModel: "sub2api::minimax-h3",
         channels: [{ ...sub2ApiSeedanceConfig.channels[0], models: [{ name: "minimax-h3", capability: "video" as const }] }],
     } as AiConfig;
 
-    await expect(createVideoGenerationTask(config, "测试视频")).resolves.toEqual({ id: "video-task", provider: "openai", model: "oidc::minimax-h3", adapter: "sub2api" });
+    await expect(createVideoGenerationTask(config, "测试视频")).resolves.toEqual({ id: "video-task", provider: "openai", model: "sub2api::minimax-h3", adapter: "sub2api" });
     expect(vi.mocked(axios.post).mock.lastCall?.[1]).toEqual({ model: "minimax-h3", prompt: "测试视频", duration: 6, aspect_ratio: "1:1", resolution: "720p", generate_audio: true });
 });
 
@@ -155,7 +155,7 @@ it("uses Cangyuan multi-image and frame fields for Sub2API Seedance", async () =
 it("omits auto aspect ratio and keeps the gateway task id for Sub2API Seedance", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { id: "video_gateway", task_id: "cangyuan-task" } });
 
-    await expect(createVideoGenerationTask({ ...sub2ApiSeedanceConfig, size: "auto" }, "文生视频")).resolves.toEqual({ id: "video_gateway", provider: "openai", model: "oidc::seedance-2.0", adapter: "sub2api" });
+    await expect(createVideoGenerationTask({ ...sub2ApiSeedanceConfig, size: "auto" }, "文生视频")).resolves.toEqual({ id: "video_gateway", provider: "openai", model: "sub2api::seedance-2.0", adapter: "sub2api" });
     expect(vi.mocked(axios.post).mock.lastCall?.[1]).toEqual({ model: "seedance-2.0", prompt: "文生视频", duration: 6, resolution: "720p", generate_audio: true });
 });
 
@@ -198,7 +198,7 @@ it("uses every image for generic xAI multi-image reference mode", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { request_id: "video-request" } });
     const image = { id: "image-1", name: "ref.png", type: "image/png", dataUrl: "data:image/png;base64,AA==" };
 
-    await expect(createVideoGenerationTask({ ...genericXaiConfig, videoMode: "reference" }, "测试视频", [image, { ...image, id: "image-2" }])).resolves.toEqual({ id: "video-request", provider: "xai", model: "oidc::grok-imagine-video" });
+    await expect(createVideoGenerationTask({ ...genericXaiConfig, videoMode: "reference" }, "测试视频", [image, { ...image, id: "image-2" }])).resolves.toEqual({ id: "video-request", provider: "xai", model: "sub2api::grok-imagine-video" });
 
     const payload = vi.mocked(axios.post).mock.lastCall?.[1];
     expect(payload).toMatchObject({ images: [{ url: image.dataUrl }, { url: image.dataUrl }] });
@@ -223,7 +223,7 @@ it("downloads a completed Sub2API OpenAI video from its signed URL without gatew
         .mockResolvedValueOnce({ data: { status: "completed", video: { url: "https://storage.example/video.mp4" } } })
         .mockResolvedValueOnce({ data: content });
 
-    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "sub2api::video-model", adapter: "sub2api" }))
         .resolves.toEqual({ status: "completed", result: { blob: content } });
     expect(axios.get).toHaveBeenNthCalledWith(1, "/api/oidc/proxy/v1/videos/video-task", { headers: { Authorization: "Bearer " }, signal: undefined });
     expect(axios.get).toHaveBeenNthCalledWith(2, "https://storage.example/video.mp4", { responseType: "blob", signal: undefined });
@@ -235,7 +235,7 @@ it("downloads a completed Sub2API Seedance video from data[0].url", async () => 
         .mockResolvedValueOnce({ data: { id: "video-task", status: "completed", data: [{ url: "https://storage.example/video.mp4" }] } })
         .mockResolvedValueOnce({ data: content });
 
-    await expect(pollVideoGenerationTask(sub2ApiSeedanceConfig, { id: "video-task", provider: "openai", model: "oidc::seedance-2.0", adapter: "sub2api" }))
+    await expect(pollVideoGenerationTask(sub2ApiSeedanceConfig, { id: "video-task", provider: "openai", model: "sub2api::seedance-2.0", adapter: "sub2api" }))
         .resolves.toEqual({ status: "completed", result: { blob: content } });
     expect(axios.get).toHaveBeenNthCalledWith(2, "https://storage.example/video.mp4", { responseType: "blob", signal: undefined });
 });
@@ -246,7 +246,7 @@ it("falls back to the Sub2API content endpoint when a completed video has no sig
         .mockResolvedValueOnce({ data: { status: "completed" } })
         .mockResolvedValueOnce({ data: content });
 
-    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "sub2api::video-model", adapter: "sub2api" }))
         .resolves.toEqual({ status: "completed", result: { blob: content } });
     expect(axios.get).toHaveBeenNthCalledWith(2, "/api/oidc/proxy/v1/videos/video-task/content", { headers: { Authorization: "Bearer " }, responseType: "blob", signal: undefined });
 });
@@ -258,7 +258,7 @@ it("falls back to the Sub2API content endpoint when the signed download is an er
         .mockResolvedValueOnce({ data: new Blob(["{\"error\":\"expired\"}"], { type: "application/json" }) })
         .mockResolvedValueOnce({ data: content });
 
-    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "sub2api::video-model", adapter: "sub2api" }))
         .resolves.toEqual({ status: "completed", result: { blob: content } });
     expect(axios.get).toHaveBeenNthCalledWith(3, "/api/oidc/proxy/v1/videos/video-task/content", { headers: { Authorization: "Bearer " }, responseType: "blob", signal: undefined });
 });
@@ -270,7 +270,7 @@ it("falls back to the Sub2API content endpoint when the signed error Blob has no
         .mockResolvedValueOnce({ data: new Blob(["{\"error\":\"expired\"}"]) })
         .mockResolvedValueOnce({ data: content });
 
-    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "sub2api::video-model", adapter: "sub2api" }))
         .resolves.toEqual({ status: "completed", result: { blob: content } });
     expect(axios.get).toHaveBeenNthCalledWith(3, "/api/oidc/proxy/v1/videos/video-task/content", { headers: { Authorization: "Bearer " }, responseType: "blob", signal: undefined });
 });
@@ -282,7 +282,7 @@ it("falls back to the Sub2API content endpoint when the signed download rejects"
         .mockRejectedValueOnce(new Error("signed URL expired"))
         .mockResolvedValueOnce({ data: content });
 
-    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "sub2api::video-model", adapter: "sub2api" }))
         .resolves.toEqual({ status: "completed", result: { blob: content } });
     expect(axios.get).toHaveBeenNthCalledWith(3, "/api/oidc/proxy/v1/videos/video-task/content", { headers: { Authorization: "Bearer " }, responseType: "blob", signal: undefined });
 });
@@ -292,7 +292,7 @@ it("rejects an invalid Sub2API content Blob", async () => {
         .mockResolvedValueOnce({ data: { status: "completed" } })
         .mockResolvedValueOnce({ data: new Blob(["<html>access denied</html>"], { type: "text/html" }) });
 
-    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "sub2api::video-model", adapter: "sub2api" }))
         .rejects.toThrow("视频下载失败");
 });
 
@@ -301,7 +301,7 @@ it("rejects an octet-stream Sub2API content error Blob", async () => {
         .mockResolvedValueOnce({ data: { status: "completed" } })
         .mockResolvedValueOnce({ data: new Blob(["{\"error\":\"access denied\"}"], { type: "application/octet-stream" }) });
 
-    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "sub2api::video-model", adapter: "sub2api" }))
         .rejects.toThrow("视频下载失败");
 });
 
@@ -311,13 +311,13 @@ it("accepts an octet-stream MP4 container from a Sub2API signed URL", async () =
         .mockResolvedValueOnce({ data: { status: "completed", video: { url: "https://storage.example/video.mp4" } } })
         .mockResolvedValueOnce({ data: content });
 
-    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "oidc::video-model", adapter: "sub2api" }))
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "video-task", provider: "openai", model: "sub2api::video-model", adapter: "sub2api" }))
         .resolves.toEqual({ status: "completed", result: { blob: content } });
     expect(axios.get).toHaveBeenCalledTimes(2);
 });
 
 it("keeps Sub2API OpenAI queued and in-progress tasks pending, and preserves failures", async () => {
-    const task = { id: "video-task", provider: "openai" as const, model: "oidc::video-model", adapter: "sub2api" as const };
+    const task = { id: "video-task", provider: "openai" as const, model: "sub2api::video-model", adapter: "sub2api" as const };
     vi.mocked(axios.get)
         .mockResolvedValueOnce({ data: { status: "queued" } })
         .mockResolvedValueOnce({ data: { status: "in_progress" } })
@@ -330,7 +330,7 @@ it("keeps Sub2API OpenAI queued and in-progress tasks pending, and preserves fai
 
 it("maps Sub2API xAI done, failed, and expired states", async () => {
     const content = new Blob(["video"], { type: "video/mp4" });
-    const task = { id: "video-request", provider: "xai" as const, model: "oidc::grok-imagine-video", adapter: "sub2api" as const };
+    const task = { id: "video-request", provider: "xai" as const, model: "sub2api::grok-imagine-video", adapter: "sub2api" as const };
     vi.mocked(axios.get)
         .mockResolvedValueOnce({ data: { status: "done", video: { url: "https://storage.example/video.mp4" } } })
         .mockResolvedValueOnce({ data: content })
@@ -348,7 +348,7 @@ it("downloads a completed xAI video through the channel content endpoint", async
         .mockResolvedValueOnce({ data: { status: "done", video: { url: "https://expired.example/video.mp4" } } })
         .mockResolvedValueOnce({ data: content });
 
-    const state = await pollVideoGenerationTask(oidcXaiConfig, { id: "video-request", provider: "xai", model: "oidc::grok-imagine-video" });
+    const state = await pollVideoGenerationTask(oidcXaiConfig, { id: "video-request", provider: "xai", model: "sub2api::grok-imagine-video" });
 
     expect(state).toEqual({ status: "completed", result: { blob: content } });
     expect(axios.get).toHaveBeenNthCalledWith(1, "/api/oidc/proxy/v1/videos/video-request", { headers: { Authorization: "Bearer " }, signal: undefined });
@@ -361,6 +361,6 @@ it("treats the provider completed status as an xAI video result", async () => {
         .mockResolvedValueOnce({ data: { status: "completed", video: { url: "https://expired.example/video.mp4" } } })
         .mockResolvedValueOnce({ data: content });
 
-    await expect(pollVideoGenerationTask(oidcXaiConfig, { id: "video-request", provider: "xai", model: "oidc::grok-imagine-video" }))
+    await expect(pollVideoGenerationTask(oidcXaiConfig, { id: "video-request", provider: "xai", model: "sub2api::grok-imagine-video" }))
         .resolves.toEqual({ status: "completed", result: { blob: content } });
 });

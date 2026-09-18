@@ -12,6 +12,14 @@ const capabilities = new Set<ModelCapability>(["image", "video", "text", "audio"
 const apiFormats = new Set<ApiCallFormat>(["openai", "gemini", "xai"]);
 const invalidLink = () => new Error(i18n.t("fork.sub2api.invalidLink"));
 
+export function createSub2ApiChannelModel(name: string, declared?: Partial<Pick<ChannelModel, "capability" | "apiFormat">>): ChannelModel {
+    return {
+        name,
+        capability: declared?.capability || guessCapability(name),
+        apiFormat: declared?.apiFormat || (/^grok-imagine-/i.test(name) ? "xai" : "openai"),
+    };
+}
+
 export function readSub2ApiChannelLink(search: string): { apiKey: string; descriptor: Sub2ApiChannelDescriptor } {
     const params = new URLSearchParams(search);
     const apiKeys = params.getAll("apiKey");
@@ -38,8 +46,8 @@ export function resolveSub2ApiChannelModels(discovered: string[], descriptor: Su
     if (!names.length) throw new Error(i18n.t("fork.sub2api.noModels"));
 
     const models = descriptor.models
-        ? descriptor.models.filter((model) => names.includes(model.name)).map((model) => ({ name: model.name, capability: model.capability || guessCapability(model.name), ...(model.apiFormat ? { apiFormat: model.apiFormat } : {}) }))
-        : names.map((name) => ({ name, capability: guessCapability(name) }));
+        ? descriptor.models.filter((model) => names.includes(model.name)).map((model) => createSub2ApiChannelModel(model.name, model))
+        : names.map((name) => createSub2ApiChannelModel(name));
 
     if (!models.length) throw new Error(i18n.t("fork.sub2api.noModels"));
     if (Object.entries(descriptor.defaults || {}).some(([capability, name]) => !models.some((model) => model.name === name && model.capability === capability))) throw new Error(i18n.t("fork.sub2api.defaultUnavailable"));

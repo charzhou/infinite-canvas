@@ -16,6 +16,14 @@ describe("Sub2API 渠道链接", () => {
         ]);
     });
 
+    it("applies known protocol defaults and an OpenAI fallback", () => {
+        expect(resolveSub2ApiChannelModels(["grok-imagine-video", "seedance-2.5", "custom-model"], { channelId: "tenant-a" })).toEqual([
+            { name: "grok-imagine-video", capability: "video", apiFormat: "xai" },
+            { name: "seedance-2.5", capability: "video", apiFormat: "openai" },
+            { name: "custom-model", capability: "text", apiFormat: "openai" },
+        ]);
+    });
+
     it.each(["?apiKey=&channel=x", "?apiKey=sk-test", "?apiKey=sk-test&channel=not-base64"])("rejects an invalid link: %s", (search) => {
         expect(() => readSub2ApiChannelLink(search)).toThrow("Sub2API 授权链接无效");
     });

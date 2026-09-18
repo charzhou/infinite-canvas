@@ -83,6 +83,7 @@ const OPENAI_BASE_URL = "https://api.openai.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
 const XAI_BASE_URL = "https://api.x.ai";
 export const SUB2API_GATEWAY_BASE_URL = "https://sub2api.tegical.com";
+export const SUB2API_CHANNEL_ID = "sub2api";
 export const LOCAL_PROXY_PACKAGE = "@basketikun/canvas-proxy";
 export const DEFAULT_LOCAL_PROXY_URL = "http://127.0.0.1:23210";
 
@@ -452,20 +453,26 @@ export function resolveModelRequestConfig(config: AiConfig, value: string): Mode
 }
 
 export function syncManagedOidcChannel(config: AiConfig, channel: ModelChannel) {
-    return withNormalizedChannels(config, [...config.channels.filter((item) => item.id !== "oidc"), createModelChannel({ ...channel, id: "oidc", authMode: "oidc" })]);
+    return replaceSub2ApiChannel(config, { ...channel, authMode: "oidc" });
 }
 
 export function removeOidcChannel(config: AiConfig) {
-    return withNormalizedChannels(config, config.channels.filter((channel) => channel.authMode !== "oidc" && channel.id !== "oidc"));
+    return withNormalizedChannels(config, config.channels.filter((channel) => channel.authMode !== "oidc"));
+}
+
+export function removeSub2ApiChannel(config: AiConfig) {
+    return withNormalizedChannels(config, config.channels.filter((channel) => channel.providerId !== "sub2api" && channel.authMode !== "oidc" && channel.id !== SUB2API_CHANNEL_ID));
+}
+
+export function replaceSub2ApiChannel(config: AiConfig, channel: Omit<ModelChannel, "id" | "providerId"> & Partial<Pick<ModelChannel, "id" | "providerId">>) {
+    const replacement = createModelChannel({ ...channel, id: SUB2API_CHANNEL_ID, providerId: "sub2api" });
+    return withNormalizedChannels(config, [...config.channels.filter((item) => item.providerId !== "sub2api" && item.authMode !== "oidc" && item.id !== SUB2API_CHANNEL_ID), replacement]);
 }
 
 export function importSub2ApiChannel(config: AiConfig, input: { apiKey: string; descriptor: Sub2ApiChannelDescriptor; models: ChannelModel[] }): AiConfig {
-    const existing = config.channels.find((channel) => channel.id === input.descriptor.channelId);
-    if (existing?.authMode === "oidc") throw new Error(i18n.t("fork.sub2api.oidcCannotOverwrite"));
     if (Object.entries(input.descriptor.defaults || {}).some(([capability, name]) => !input.models.some((model) => model.name === name && model.capability === capability))) throw new Error(i18n.t("fork.sub2api.defaultUnavailable"));
-    const channel = createModelChannel({ id: input.descriptor.channelId, name: input.descriptor.name || existing?.name || "Sub2API", baseUrl: SUB2API_GATEWAY_BASE_URL, apiKey: input.apiKey, apiFormat: "openai", authMode: "manual", providerId: "sub2api", models: input.models });
-    const normalized = withNormalizedChannels(config, existing ? config.channels.map((item) => (item.id === channel.id ? channel : item)) : [...config.channels, channel]);
-    return applyDescriptorDefaults(normalized, input.descriptor.defaults, channel.id);
+    const normalized = replaceSub2ApiChannel(config, { name: input.descriptor.name || "Sub2API", baseUrl: SUB2API_GATEWAY_BASE_URL, apiKey: input.apiKey, apiFormat: "openai", authMode: "manual", models: input.models });
+    return applyDescriptorDefaults(normalized, input.descriptor.defaults, SUB2API_CHANNEL_ID);
 }
 
 function withNormalizedChannels(config: AiConfig, channels: ModelChannel[]): AiConfig {
@@ -476,6 +483,10 @@ function withNormalizedChannels(config: AiConfig, channels: ModelChannel[]): AiC
         return selectableModelsByCapability(next, capability).includes(value) ? value : selectableModelsByCapability(next, capability)[0] || "";
     };
     return { ...next, imageModel: pick("image", config.imageModel), videoModel: pick("video", config.videoModel), textModel: pick("text", config.textModel), audioModel: pick("audio", config.audioModel) };
+}
+
+export function normalizeAiConfig(config: AiConfig) {
+    return withNormalizedChannels(config, normalizeChannels(config));
 }
 
 function applyDescriptorDefaults(config: AiConfig, defaults: Sub2ApiChannelDescriptor["defaults"], channelId: string): AiConfig {
@@ -491,7 +502,7 @@ export function isXaiModelConfig(config: AiConfig, value = config.videoModel || 
 
 function normalizeChannels(config: AiConfig) {
     const persistedChannels = Array.isArray(config.channels) ? config.channels : [];
-    const channels = persistedChannels.map((channel, index) =>
+    const normalized = persistedChannels.map((channel, index) =>
         createModelChannel({
             ...channel,
             id: channel.id || (index === 0 ? "default" : `channel-${index + 1}`),
@@ -499,6 +510,9 @@ function normalizeChannels(config: AiConfig) {
             models: normalizeChannelModels(channel.models),
         }),
     );
+    const sub2ApiChannel = normalized.find((channel) => channel.providerId === "sub2api" || channel.authMode === "oidc" || channel.id === SUB2API_CHANNEL_ID);
+    const channels = normalized.filter((channel) => channel.providerId !== "sub2api" && channel.authMode !== "oidc" && channel.id !== SUB2API_CHANNEL_ID);
+    if (sub2ApiChannel) channels.push(createModelChannel({ ...sub2ApiChannel, id: SUB2API_CHANNEL_ID, providerId: "sub2api" }));
     if (!channels.length) {
         channels.push(
             createModelChannel({

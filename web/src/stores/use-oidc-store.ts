@@ -16,6 +16,7 @@ type OidcState = {
     connect: (modelIds: string[]) => Promise<void>;
     reportAuthorizationResult: (result: "failed" | "invalid_scope") => void;
     syncModels: () => Promise<void>;
+    disconnectSession: () => Promise<void>;
     disconnect: () => Promise<void>;
     invalidate: () => void;
 };
@@ -78,11 +79,22 @@ export const useOidcStore = create<OidcState>((set, get) => ({
         try {
             const models = await getOidcModels();
             const { providerName } = get();
-            useConfigStore.setState((state) => ({ config: syncManagedOidcChannel(state.config, { id: "oidc", name: providerName, baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models }) }));
+            useConfigStore.setState((state) => ({ config: syncManagedOidcChannel(state.config, { id: "sub2api", name: providerName, baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models }) }));
             set({ connected: true, modelIds: models.map((model) => model.id) });
         } catch (error) {
-            removeManagedChannel();
             set({ connected: false, modelIds: [], error: error instanceof Error ? error.message : i18n.t("fork.oidc.modelSyncFailed") });
+        } finally {
+            set({ loading: false });
+        }
+    },
+    disconnectSession: async () => {
+        set({ loading: true, error: "" });
+        try {
+            await disconnectOidc();
+            set({ connected: false, modelIds: [] });
+        } catch (error) {
+            set({ error: error instanceof Error ? error.message : i18n.t("fork.oidc.disconnectFailed") });
+            throw error;
         } finally {
             set({ loading: false });
         }
@@ -95,6 +107,7 @@ export const useOidcStore = create<OidcState>((set, get) => ({
             set({ connected: false, modelIds: [] });
         } catch (error) {
             set({ error: error instanceof Error ? error.message : i18n.t("fork.oidc.disconnectFailed") });
+            throw error;
         } finally {
             set({ loading: false });
         }
