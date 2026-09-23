@@ -16,7 +16,7 @@ import { formatBytes, formatDuration } from "@/lib/image-utils";
 import { deleteStoredMedia, resolveMediaUrl, uploadMediaFile } from "@/services/file-storage";
 import { resolveImageUrl, ensureImagePreview, previewUrlFor, getImagePreviewRevision, subscribeImagePreviews, uploadImage } from "@/services/image-storage";
 import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, videoPollDelay, videoPollTimeoutMs, type VideoGenerationTask } from "@/services/api/video";
-import { isCangyuanVideoModel } from "@/services/api/sub2api-video";
+import { cangyuanImageReferenceLimit, isCangyuanVideoModel } from "@/services/api/sub2api-video";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
 import { boolConfig, isXaiModelConfig, modelOptionLabel, resolveModelRequestConfig, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
@@ -70,6 +70,7 @@ type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => 
 
 const LOG_STORE_KEY = "infinite-canvas:video_generation_logs";
 const logStore = localforage.createInstance({ name: "infinite-canvas", storeName: "video_generation_logs" });
+const MAX_DEFAULT_IMAGE_REFERENCES = 7;
 const MAX_MEDIA_REFERENCES = 3;
 type ReferenceMedia = ReferenceVideo | ReferenceAudio;
 
@@ -116,7 +117,14 @@ export default function VideoPage() {
 
     const model = effectiveConfig.videoModel || effectiveConfig.model;
     const supportsCangyuanReferences = resolveModelRequestConfig(effectiveConfig, model).providerId === "sub2api" && isCangyuanVideoModel(model);
+    const maxImageReferences = supportsCangyuanReferences ? cangyuanImageReferenceLimit(effectiveConfig.videoMode) : MAX_DEFAULT_IMAGE_REFERENCES;
+    const maxImageReferencesRef = useRef(maxImageReferences);
+    maxImageReferencesRef.current = maxImageReferences;
     const canGenerate = Boolean(prompt.trim());
+
+    useEffect(() => {
+        setReferences((value) => value.length > maxImageReferences ? value.slice(0, maxImageReferences) : value);
+    }, [maxImageReferences]);
 
     useEffect(() => {
         if (!running || !startedAt) return;
@@ -132,14 +140,14 @@ export default function VideoPage() {
         const selectedFiles = Array.from(files || []);
         const unsupported = selectedFiles.filter((file) => !file.type.startsWith("image/"));
         if (unsupported.length) message.warning(t("videoWorkbench.unsupportedFiles"));
-        const imageFiles = selectedFiles.filter((file) => file.type.startsWith("image/")).slice(0, 7 - references.length);
+        const imageFiles = selectedFiles.filter((file) => file.type.startsWith("image/")).slice(0, Math.max(0, maxImageReferences - references.length));
         const nextReferences = await Promise.all(
             imageFiles.map(async (file) => {
                 const image = await uploadImage(file);
                 return { id: nanoid(), name: file.name, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
             }),
         );
-        setReferences((value) => [...value, ...nextReferences].slice(0, 7));
+        setReferences((value) => [...value, ...nextReferences].slice(0, maxImageReferencesRef.current));
     };
 
     const handleReferenceDragEnter = (event: DragEvent<HTMLDivElement>) => {
@@ -170,12 +178,12 @@ export default function VideoPage() {
                 return;
             }
             const nextReferences = await Promise.all(
-                blobs.slice(0, 7 - references.length).map(async (blob, index) => {
+                blobs.slice(0, Math.max(0, maxImageReferences - references.length)).map(async (blob, index) => {
                     const image = await uploadImage(blob);
                     return { id: nanoid(), name: `clipboard-${index + 1}.png`, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
                 }),
             );
-            setReferences((value) => [...value, ...nextReferences].slice(0, 7));
+            setReferences((value) => [...value, ...nextReferences].slice(0, maxImageReferencesRef.current));
             message.success(t("videoWorkbench.clipboardAdded", { count: nextReferences.length }));
         } catch {
             message.error(t("videoWorkbench.clipboardEmpty"));
@@ -277,7 +285,7 @@ export default function VideoPage() {
             openConfigDialog(true);
             return null;
         }
-        return { text, config: buildVideoConfig(effectiveConfig, model), references: [...references], videoReferences: supportsCangyuanReferences ? [...videoReferences] : [], audioReferences: supportsCangyuanReferences ? [...audioReferences] : [] };
+        return { text, config: buildVideoConfig(effectiveConfig, model), references: references.slice(0, maxImageReferences), videoReferences: supportsCangyuanReferences ? [...videoReferences] : [], audioReferences: supportsCangyuanReferences ? [...audioReferences] : [] };
     };
 
     const retryResult = () => {
@@ -310,8 +318,12 @@ export default function VideoPage() {
         if (payload.kind === "text") {
             setPrompt(payload.content);
         } else if (payload.kind === "image") {
+            if (references.length >= maxImageReferences) {
+                setAssetPickerOpen(false);
+                return;
+            }
             const stored = await uploadImage(payload.dataUrl);
-            setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }].slice(0, 7));
+            setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }].slice(0, maxImageReferencesRef.current));
         } else if (payload.kind === "video" && supportsCangyuanReferences) {
             const url = await resolveMediaUrl(payload.storageKey, payload.url);
             setVideoReferences((value) => [...value, { id: nanoid(), name: payload.title, type: "video/mp4", url, storageKey: payload.storageKey, width: payload.width, height: payload.height }].slice(0, MAX_MEDIA_REFERENCES));
@@ -517,7 +529,7 @@ export default function VideoPage() {
                                             </button>
                                         </div>
                                     ))}
-                                    {!references.length ? <div className="flex min-w-full items-center justify-center text-sm text-stone-500">{referenceDragTarget ? t("videoWorkbench.dropReferences") : t("videoWorkbench.noImages")}</div> : null}
+                                    {!references.length ? <div className="flex min-w-full items-center justify-center text-sm text-stone-500">{referenceDragTarget ? t("videoWorkbench.dropReferences") : t("videoWorkbench.noImages", { count: maxImageReferences })}</div> : null}
                                 </div>
                             </div>
 

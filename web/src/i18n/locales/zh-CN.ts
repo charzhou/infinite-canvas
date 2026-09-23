@@ -252,7 +252,7 @@ export default {
         removeVideo: "移除参考视频",
         removeAudio: "移除参考音频",
         dropReferences: "松开即可上传参考资产",
-        noImages: "暂无参考图，可拖入文件，最多 7 张",
+        noImages: "暂无参考图，可拖入文件，最多 {{count}} 张",
         noVideos: "暂无参考视频，可上传文件或添加公网 HTTPS 链接，最多 3 个",
         noAudio: "暂无参考音频，可上传文件或添加公网 HTTPS 链接，最多 3 个",
         videoUrlPlaceholder: "粘贴参考视频公网 HTTPS 地址",

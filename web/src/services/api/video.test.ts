@@ -140,16 +140,18 @@ it("gives MiniMax H3 the same Sub2API Cangyuan video behavior", async () => {
     expect(vi.mocked(axios.post).mock.lastCall?.[1]).toEqual({ model: "minimax-h3", prompt: "测试视频", duration: 6, aspect_ratio: "1:1", resolution: "720p", generate_audio: true });
 });
 
-it("uses Cangyuan multi-image and frame fields for Sub2API Seedance", async () => {
+it("limits Sub2API Seedance frame mode to two images and reference mode to nine", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
     const image = { id: "image-1", name: "first.png", type: "image/png", url: "https://assets.example.com/first.png", dataUrl: "" };
     const secondImage = { ...image, id: "image-2", url: "https://assets.example.com/last.png" };
+    const images = Array.from({ length: 10 }, (_, index) => ({ ...image, id: `image-${index + 1}`, url: `https://assets.example.com/${index + 1}.png` }));
 
-    await createVideoGenerationTask(sub2ApiSeedanceConfig, "首尾帧", [image, secondImage]);
+    await createVideoGenerationTask(sub2ApiSeedanceConfig, "首尾帧", [image, secondImage, images[2]]);
     expect(vi.mocked(axios.post).mock.lastCall?.[1]).toMatchObject({ first_image_url: image.url, last_image_url: secondImage.url });
+    expect(vi.mocked(axios.post).mock.lastCall?.[1]).not.toHaveProperty("reference_image_urls");
 
-    await createVideoGenerationTask({ ...sub2ApiSeedanceConfig, videoMode: "reference" }, "多图参考", [image, secondImage]);
-    expect(vi.mocked(axios.post).mock.lastCall?.[1]).toMatchObject({ reference_image_urls: [image.url, secondImage.url] });
+    await createVideoGenerationTask({ ...sub2ApiSeedanceConfig, videoMode: "reference" }, "多图参考", images);
+    expect(vi.mocked(axios.post).mock.lastCall?.[1]).toMatchObject({ reference_image_urls: images.slice(0, 9).map((item) => item.url) });
 });
 
 it("omits auto aspect ratio and keeps the gateway task id for Sub2API Seedance", async () => {

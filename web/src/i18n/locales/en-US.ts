@@ -252,7 +252,7 @@ export default {
         removeVideo: "Remove reference video",
         removeAudio: "Remove reference audio",
         dropReferences: "Drop to upload reference assets",
-        noImages: "No reference images. Drag in up to 7 files.",
+        noImages: "No reference images. Drag in up to {{count}} files.",
         noVideos: "No reference videos. Upload files or add public HTTPS URLs, up to 3.",
         noAudio: "No reference audio. Upload files or add public HTTPS URLs, up to 3.",
         videoUrlPlaceholder: "Paste a public HTTPS reference video URL",

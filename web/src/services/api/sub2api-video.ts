@@ -23,6 +23,10 @@ export function isCangyuanVideoModel(model: string) {
     return CANGYUAN_VIDEO_MODELS.has(modelOptionName(model).toLowerCase());
 }
 
+export function cangyuanImageReferenceLimit(mode: string | undefined) {
+    return mode === "reference" ? 9 : 2;
+}
+
 export async function createSub2ApiVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
     return config.apiFormat === "xai"
         ? createSub2ApiXaiVideoTask(config, model, prompt, references, options)
@@ -39,8 +43,8 @@ export async function pollSub2ApiVideoTask(config: ModelRequestConfig, task: Vid
 
 async function createSub2ApiCangyuanVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
     try {
-        const imageUrls = await Promise.all(references.map((image) => uploadImageReference(config, image, options)));
-        const mode = resolveCangyuanVideoMode(config.videoMode, imageUrls.length);
+        const mode = config.videoMode === "reference" ? "reference" : "frames";
+        const imageUrls = await Promise.all(references.slice(0, cangyuanImageReferenceLimit(mode)).map((image) => uploadImageReference(config, image, options)));
         const payload: Record<string, unknown> = {
             model: modelOptionName(model),
             prompt,
@@ -240,11 +244,6 @@ function unwrapVideoResponse(payload: ApiVideoResponse): OpenAIVideoTask {
         return payload.data;
     }
     return payload;
-}
-
-function resolveCangyuanVideoMode(mode: string | undefined, imageCount: number) {
-    if (mode === "reference" || imageCount > 2) return "reference";
-    return "frames";
 }
 
 function isHttpsUrl(value: string | undefined): value is string {
