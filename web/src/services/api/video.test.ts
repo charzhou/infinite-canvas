@@ -204,6 +204,27 @@ it("uploads local Seedance reference media through the gateway Files API", async
     expect(vi.mocked(axios.post).mock.lastCall?.[1]).toMatchObject({ reference_videos: [{ file_id: "file-video" }], reference_audios: [{ file_id: "file-audio" }] });
 });
 
+it("retries a transient gateway Files upload failure", async () => {
+    vi.useFakeTimers();
+    try {
+        vi.mocked(axios.isAxiosError).mockImplementationOnce(() => true);
+        vi.mocked(axios.post)
+            .mockRejectedValueOnce(Object.assign(new Error("gateway unavailable"), { response: { status: 503 } }))
+            .mockResolvedValueOnce({ data: { id: "file-video" } })
+            .mockResolvedValueOnce({ data: { id: "video-task" } });
+
+        const task = createVideoGenerationTask(sub2ApiSeedanceConfig, "可重试素材", [], {
+            videos: [{ id: "v1", name: "clip.mp4", type: "video/mp4", storageKey: "video:local" }],
+        });
+        await vi.advanceTimersByTimeAsync(500);
+
+        await expect(task).resolves.toEqual({ id: "video-task", provider: "openai", model: "sub2api::seedance-2.0", adapter: "sub2api" });
+        expect(vi.mocked(axios.post)).toHaveBeenCalledTimes(3);
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
 it("uses every image for generic xAI multi-image reference mode", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { request_id: "video-request" } });
     const image = { id: "image-1", name: "ref.png", type: "image/png", dataUrl: "data:image/png;base64,AA==" };

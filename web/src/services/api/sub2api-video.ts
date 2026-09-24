@@ -17,6 +17,8 @@ type ApiVideoResponse = OpenAIVideoTask | { code?: number | string; data?: OpenA
 type GatewayFileResponse = { id?: string; data?: { id?: string } | null; error?: { message?: string } | string; message?: string };
 type CangyuanMediaReference = string | { file_id: string };
 const CANGYUAN_VIDEO_MODELS = new Set(["seedance-2.0", "seedance-2.0-mini", "seedance-2.0-fast", "seedance-2.5", "minimax-h3"]);
+const CANGYUAN_FILE_UPLOAD_MAX_ATTEMPTS = 3;
+const CANGYUAN_FILE_UPLOAD_RETRY_DELAY_MS = 500;
 const apiText = (key: string) => i18n.t(`apiErrors.${key}`);
 const forkVideoText = (key: string) => i18n.t(`fork.video.${key}`);
 
@@ -190,10 +192,39 @@ async function uploadGatewayFile(config: ModelRequestConfig, blob: Blob, filenam
     const form = new FormData();
     form.append("purpose", "user_data");
     form.append("file", blob, filename);
-    const response = await axios.post<GatewayFileResponse>(apiUrl(config, "/files"), form, requestOptions(config, undefined, options));
-    const fileId = response.data.id || response.data.data?.id;
-    if (!fileId) throw new Error(readError(response.data) || apiText("videoTaskCreateFailed"));
-    return fileId;
+    for (let attempt = 0; attempt < CANGYUAN_FILE_UPLOAD_MAX_ATTEMPTS; attempt += 1) {
+        if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        try {
+            const response = await axios.post<GatewayFileResponse>(apiUrl(config, "/files"), form, requestOptions(config, undefined, options));
+            const fileId = response.data.id || response.data.data?.id;
+            if (!fileId) throw new Error(readError(response.data) || apiText("videoTaskCreateFailed"));
+            return fileId;
+        } catch (error) {
+            if (!isRetryableFileUploadError(error) || attempt === CANGYUAN_FILE_UPLOAD_MAX_ATTEMPTS - 1) throw error;
+            await delay(CANGYUAN_FILE_UPLOAD_RETRY_DELAY_MS * 2 ** attempt, options?.signal);
+        }
+    }
+    throw new Error(apiText("videoTaskCreateFailed"));
+}
+
+function isRetryableFileUploadError(error: unknown) {
+    if (axios.isCancel(error) || !axios.isAxiosError<{ response?: { status?: number } }>(error)) return false;
+    const status = error.response?.status;
+    return !status || status === 408 || status === 429 || status >= 500;
+}
+
+function delay(ms: number, signal?: AbortSignal) {
+    return new Promise<void>((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(new DOMException("Aborted", "AbortError"));
+            return;
+        }
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new DOMException("Aborted", "AbortError"));
+        }, { once: true });
+    });
 }
 
 function normalizeCangyuanSeconds(value: string) {
