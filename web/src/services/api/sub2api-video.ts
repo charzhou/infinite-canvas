@@ -2,6 +2,7 @@ import axios from "axios";
 
 import i18n from "@/i18n";
 import { dataUrlToFile } from "@/lib/image-utils";
+import { inferVideoRatio } from "@/lib/media-size";
 import { getMediaBlob } from "@/services/file-storage";
 import { getImageBlob, imageToDataUrl } from "@/services/image-storage";
 import { boolConfig, buildApiUrl, modelOptionName, type ModelRequestConfig } from "@/stores/use-config-store";
@@ -209,12 +210,8 @@ function normalizeXaiSeconds(value: string) {
 
 function normalizeAspectRatio(value: string) {
     if (!value || value === "auto") return undefined;
-    if (/^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(value)) return value;
-    if (/^(\d+)x(\d+)$/.test(value)) {
-        const [, width, height] = value.match(/^(\d+)x(\d+)$/) || [];
-        return reduceAspectRatio(Number(width), Number(height));
-    }
-    return undefined;
+    const ratio = inferVideoRatio(value);
+    return ratio === "auto" ? undefined : ratio;
 }
 
 function normalizeVideoSize(value: string) {

@@ -105,7 +105,7 @@ it("uses only the first image for Sub2API xAI first-frame mode", async () => {
 
 it("uses a JSON OpenAI video payload for Sub2API", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
-    const image = { id: "image-1", name: "ref.png", type: "image/png", dataUrl: "[image omitted]" };
+    const image = { id: "image-1", name: "ref.png", type: "image/png", dataUrl: "data:image/png;base64,AA==" };
 
     await expect(createVideoGenerationTask(sub2ApiOpenAiConfig, "测试视频", [image])).resolves.toEqual({ id: "video-task", provider: "openai", model: "sub2api::video-model", adapter: "sub2api" });
     expect(axios.post).toHaveBeenCalledWith(
@@ -125,6 +125,14 @@ it("uses the Cangyuan JSON video payload for Sub2API Seedance", async () => {
         { model: "seedance-2.0", prompt: "测试视频", duration: 6, aspect_ratio: "1:1", resolution: "720p", generate_audio: true, first_image_url: image.url },
         { headers: { Authorization: "Bearer ", "Content-Type": "application/json" }, signal: undefined },
     );
+});
+
+it("canonicalizes a 480p 16:9 Cangyuan size", async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
+
+    await createVideoGenerationTask({ ...sub2ApiSeedanceConfig, size: "854x480", vquality: "480" }, "测试视频");
+
+    expect(vi.mocked(axios.post).mock.lastCall?.[1]).toMatchObject({ aspect_ratio: "16:9", resolution: "480p" });
 });
 
 it("gives MiniMax H3 the same Sub2API Cangyuan video behavior", async () => {
