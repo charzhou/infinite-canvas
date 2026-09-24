@@ -19,6 +19,8 @@ type CangyuanMediaReference = string | { file_id: string };
 const CANGYUAN_VIDEO_MODELS = new Set(["seedance-2.0", "seedance-2.0-mini", "seedance-2.0-fast", "seedance-2.5", "minimax-h3"]);
 const CANGYUAN_FILE_UPLOAD_MAX_ATTEMPTS = 3;
 const CANGYUAN_FILE_UPLOAD_RETRY_DELAY_MS = 500;
+const gatewayFileCache = new Map<string, string>();
+const gatewayFileUploads = new Map<string, Promise<string>>();
 const apiText = (key: string) => i18n.t(`apiErrors.${key}`);
 const forkVideoText = (key: string) => i18n.t(`fork.video.${key}`);
 
@@ -175,7 +177,7 @@ async function uploadImageReference(config: ModelRequestConfig, image: Reference
     if (isHttpsUrl(image.url)) return image.url;
     const blob = image.storageKey ? await getImageBlob(image.storageKey) : image.dataUrl?.startsWith("data:") ? dataUrlToFile(image) : undefined;
     if (!blob) throw new Error(apiText("referenceImageReadFailed"));
-    return { file_id: await uploadGatewayFile(config, blob, image.name || "reference-image", options) };
+    return { file_id: await uploadGatewayFile(config, blob, image.name || "reference-image", options, image.storageKey) };
 }
 
 async function uploadMediaReferences(config: ModelRequestConfig, items: Array<{ url?: string; storageKey?: string; name?: string }> | undefined, options?: RequestOptions): Promise<CangyuanMediaReference[]> {
@@ -184,11 +186,30 @@ async function uploadMediaReferences(config: ModelRequestConfig, items: Array<{ 
         if (!item.storageKey) throw new Error(apiText("localAssetReadFailed"));
         const blob = await getMediaBlob(item.storageKey);
         if (!blob) throw new Error(apiText("localAssetReadFailed"));
-        return { file_id: await uploadGatewayFile(config, blob, item.name || "reference-media", options) };
+        return { file_id: await uploadGatewayFile(config, blob, item.name || "reference-media", options, item.storageKey) };
     }));
 }
 
-async function uploadGatewayFile(config: ModelRequestConfig, blob: Blob, filename: string, options?: RequestOptions) {
+async function uploadGatewayFile(config: ModelRequestConfig, blob: Blob, filename: string, options?: RequestOptions, storageKey?: string) {
+    const cacheKey = storageKey ? gatewayFileCacheKey(config, storageKey) : undefined;
+    if (cacheKey) {
+        const cached = gatewayFileCache.get(cacheKey);
+        if (cached) return cached;
+        const pending = gatewayFileUploads.get(cacheKey);
+        if (pending) return pending;
+    }
+    const upload = uploadGatewayFileWithRetry(config, blob, filename, options);
+    if (cacheKey) gatewayFileUploads.set(cacheKey, upload);
+    try {
+        const fileId = await upload;
+        if (cacheKey) gatewayFileCache.set(cacheKey, fileId);
+        return fileId;
+    } finally {
+        if (cacheKey && gatewayFileUploads.get(cacheKey) === upload) gatewayFileUploads.delete(cacheKey);
+    }
+}
+
+async function uploadGatewayFileWithRetry(config: ModelRequestConfig, blob: Blob, filename: string, options?: RequestOptions) {
     const form = new FormData();
     form.append("purpose", "user_data");
     form.append("file", blob, filename);
@@ -205,6 +226,10 @@ async function uploadGatewayFile(config: ModelRequestConfig, blob: Blob, filenam
         }
     }
     throw new Error(apiText("videoTaskCreateFailed"));
+}
+
+function gatewayFileCacheKey(config: ModelRequestConfig, storageKey: string) {
+    return [config.providerId || "", config.authMode || "", config.apiFormat, config.baseUrl, config.apiKey, storageKey].join("\u0000");
 }
 
 function isRetryableFileUploadError(error: unknown) {

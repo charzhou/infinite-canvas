@@ -204,6 +204,21 @@ it("uploads local Seedance reference media through the gateway Files API", async
     expect(vi.mocked(axios.post).mock.lastCall?.[1]).toMatchObject({ reference_videos: [{ file_id: "file-video" }], reference_audios: [{ file_id: "file-audio" }] });
 });
 
+it("reuses a cached gateway file ID for repeated local media", async () => {
+    vi.mocked(axios.post)
+        .mockResolvedValueOnce({ data: { id: "file-video" } })
+        .mockResolvedValueOnce({ data: { id: "video-task-1" } })
+        .mockResolvedValueOnce({ data: { id: "video-task-2" } });
+    const videos = [{ id: "v-cache", name: "clip.mp4", type: "video/mp4", storageKey: "video:cache" }];
+
+    await createVideoGenerationTask(sub2ApiSeedanceConfig, "第一次生成", [], { videos });
+    await createVideoGenerationTask(sub2ApiSeedanceConfig, "第二次生成", [], { videos });
+
+    expect(vi.mocked(axios.post)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(axios.post).mock.calls[1][1]).toMatchObject({ reference_videos: [{ file_id: "file-video" }] });
+    expect(vi.mocked(axios.post).mock.calls[2][1]).toMatchObject({ reference_videos: [{ file_id: "file-video" }] });
+});
+
 it("retries a transient gateway Files upload failure", async () => {
     vi.useFakeTimers();
     try {
@@ -214,7 +229,7 @@ it("retries a transient gateway Files upload failure", async () => {
             .mockResolvedValueOnce({ data: { id: "video-task" } });
 
         const task = createVideoGenerationTask(sub2ApiSeedanceConfig, "可重试素材", [], {
-            videos: [{ id: "v1", name: "clip.mp4", type: "video/mp4", storageKey: "video:local" }],
+            videos: [{ id: "v-retry", name: "clip.mp4", type: "video/mp4", storageKey: "video:retry-local" }],
         });
         await vi.advanceTimersByTimeAsync(500);
 
