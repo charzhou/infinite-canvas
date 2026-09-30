@@ -1,8 +1,8 @@
 import { saveAs } from "file-saver";
 
 import { createZip, readZip } from "@/lib/zip";
-import { getMediaBlob, setMediaBlob } from "@/services/file-storage";
-import { getImageBlob, setImageBlob } from "@/services/image-storage";
+import { getMediaBlob, resolveMediaUrl, setMediaBlob } from "@/services/file-storage";
+import { getImageBlob, resolveImageUrl, setImageBlob } from "@/services/image-storage";
 import type { Asset } from "@/stores/use-asset-store";
 
 type AssetExportFile = {
@@ -47,15 +47,36 @@ export async function readAssetPackage(file: File) {
     const assetFile = zip.get("assets.json");
     if (!assetFile) throw new Error("missing assets.json");
     const data = JSON.parse(await assetFile.text()) as AssetExportFile;
+    const missingFiles = data.files.filter((item) => !zip.get(item.path));
+    if (missingFiles.length) throw new Error(`missing asset files: ${missingFiles.length}`);
+    const packageKeys = new Set(data.files.map((item) => item.storageKey));
+    const missingReferences = data.assets.filter((asset) => (asset.kind === "image" || asset.kind === "video") && asset.data.storageKey && !packageKeys.has(asset.data.storageKey));
+    if (missingReferences.length) throw new Error(`missing asset references: ${missingReferences.length}`);
     await Promise.all(
         data.files.map(async (item) => {
             const blob = zip.get(item.path);
-            if (!blob) return;
+            if (!blob) throw new Error(`missing asset file: ${item.path}`);
             const typedBlob = blob.type ? blob : blob.slice(0, blob.size, item.mimeType);
             await (item.storageKey.startsWith("image:") ? setImageBlob(item.storageKey, typedBlob) : setMediaBlob(item.storageKey, typedBlob));
         }),
     );
-    return data.assets;
+    return Promise.all(
+        data.assets.map(async (asset) => {
+            if (asset.kind === "image" && asset.data.storageKey) {
+                const dataUrl = await resolveImageUrl(asset.data.storageKey, asset.data.dataUrl);
+                return {
+                    ...asset,
+                    coverUrl: asset.coverUrl.startsWith("blob:") || asset.coverUrl === asset.data.dataUrl ? dataUrl : asset.coverUrl,
+                    data: { ...asset.data, dataUrl },
+                };
+            }
+            if (asset.kind === "video" && asset.data.storageKey) {
+                const url = await resolveMediaUrl(asset.data.storageKey, asset.data.url);
+                return { ...asset, coverUrl: asset.coverUrl.startsWith("blob:") || asset.coverUrl === asset.data.url ? url : asset.coverUrl, data: { ...asset.data, url } };
+            }
+            return asset;
+        }),
+    );
 }
 
 function safeFileName(value: string) {

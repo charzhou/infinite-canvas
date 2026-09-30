@@ -27,6 +27,7 @@ export default {
         durationMinutes: "{{minutes}}分{{seconds}}秒",
         durationSeconds: "{{seconds}}秒",
         imageReadFailed: "读取图片失败",
+        mediaReadFailed: "读取媒体失败",
     },
     fork: {
         oidc: {
@@ -131,6 +132,7 @@ export default {
         end: "已经到底了",
     },
     assets: {
+        storageReadFailed: "素材本地数据读取失败，已停止写入以避免覆盖已有素材",
         title: "我的资产",
         description: "收藏常用文本和图片，按类型、标题和标签快速查找。",
         search: "搜索标题、内容、标签或来源",
@@ -281,6 +283,7 @@ export default {
         empty: "还没有生成视频",
     },
     canvas: {
+        storageReadFailed: "画布本地数据读取失败，已停止写入以避免覆盖已有画布",
         defaultTitle: "无限画布 {{count}}",
         library: "画布库",
         title: "无限画布",
@@ -684,7 +687,7 @@ export default {
                 uploadManifest: "上传清单 {{size}}",
                 complete: "完成",
             },
-            errors: { testFailed: "WebDAV 连接测试失败", downloadFailed: "读取 WebDAV 同步文件失败", downloadTimeout: "读取 WebDAV 同步文件超时", emptyUpload: "上传文件为空，已取消上传", uploadFailed: "上传 WebDAV 同步文件失败", directoryFailed: "创建 WebDAV 远程目录失败", requestTimeout: "WebDAV 请求超时，请检查网络或远端服务状态", connectionFailed: "无法连接 WebDAV，请检查地址、HTTPS 证书、CORS 或网络状态", urlRequired: "请先填写 WebDAV 地址", authenticationFailed: "WebDAV 认证失败，请检查用户名、密码或应用密码", pathMissing: "WebDAV 路径不存在，请检查地址和远程目录", responseFailed: "{{fallback}}：{{status}}{{detail}}", syncFailed: "同步失败", invalidManifest: "{{domain}} 同步清单不是当前应用的数据" },
+            errors: { testFailed: "WebDAV 连接测试失败", downloadFailed: "读取 WebDAV 同步文件失败", downloadTimeout: "读取 WebDAV 同步文件超时", emptyUpload: "上传文件为空，已取消上传", uploadFailed: "上传 WebDAV 同步文件失败", directoryFailed: "创建 WebDAV 远程目录失败", requestTimeout: "WebDAV 请求超时，请检查网络或远端服务状态", connectionFailed: "无法连接 WebDAV，请检查地址、HTTPS 证书、CORS 或网络状态", urlRequired: "请先填写 WebDAV 地址", authenticationFailed: "WebDAV 认证失败，请检查用户名、密码或应用密码", pathMissing: "WebDAV 路径不存在，请检查地址和远程目录", responseFailed: "{{fallback}}：{{status}}{{detail}}", syncFailed: "同步失败", invalidManifest: "{{domain}} 同步清单不是当前应用的数据", missingMedia: "远端缺少 {{count}} 个媒体文件，未写入本地数据", storageMissing: "同步数据引用的 {{count}} 个媒体文件已缺失，未写入同步清单" },
         },
         protocols: {
         },

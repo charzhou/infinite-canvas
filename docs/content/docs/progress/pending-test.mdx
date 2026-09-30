@@ -7,6 +7,7 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- Asset and canvas recovery: after refreshing or reopening existing assets and canvases, stored image, video, and audio content should load from its local `storageKey`; a local storage read failure should show an error and must not replace existing data with empty lists. Deleting an unrelated asset or canvas should not remove media referenced by image or video workbench history. Asset and canvas ZIP imports should reject missing files and immediately show imported media. WebDAV sync should refuse to apply a manifest when any referenced remote media file is missing. Edits made in separate tabs and edits closed immediately after a change should retain the newest project or asset data.
 - Canvas image previews and local storage: image-heavy canvas views should use locally cached WebP previews capped at 768px, while full-size viewing, editing, downloading, exporting, generation references, and WebDAV sync continue using original media; deleting an image should clean up its preview.
 - Canvas rendering performance: dragging nodes and groups should keep group highlighting and drop positions correct, and viewport-cropped connection rendering should keep visible crossing connections selectable.
 - Image request timeout: an image generation or edit request that does not respond within ten minutes should fail with a retryable timeout instead of remaining in a loading state.

@@ -43,23 +43,34 @@ export async function resolveMetadataReferences(metadata: CanvasNodeMetadata) {
 }
 
 export async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
+    const resolveCanvasImage = (storageKey: string | undefined, fallback: string) => resolveImageUrl(storageKey, fallback).catch(() => "");
+    const resolveCanvasMedia = (storageKey: string, fallback: string) => resolveMediaUrl(storageKey, fallback).catch(() => "");
     return Promise.all(
         nodes.map(async (node) => {
             const metadata = node.metadata;
-            const content = metadata?.content;
-            if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && metadata?.storageKey) return { ...node, metadata: { ...metadata, content: await resolveMediaUrl(metadata.storageKey, content) } };
-            if (node.type !== CanvasNodeType.Image || !metadata || !content) return node;
+            if (!metadata) return node;
+            const content = metadata.content || "";
+            if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && metadata.storageKey) {
+                const resolved = await resolveCanvasMedia(metadata.storageKey, content);
+                return { ...node, metadata: { ...metadata, content: resolved, ...(resolved ? {} : { status: "error" as const, errorDetails: i18n.t("common.mediaReadFailed") }) } };
+            }
+            if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && content.startsWith("blob:")) return { ...node, metadata: { ...metadata, content: "", status: "error" as const, errorDetails: i18n.t("common.mediaReadFailed") } };
+            if (node.type !== CanvasNodeType.Image) return node;
             const images = await Promise.all(
                 (metadata.images || []).map(async (image) => {
-                    if (!image.content) return image;
+                    if (!image.storageKey && !image.content) return image;
                     void ensureImagePreview(image.storageKey);
-                    return { ...image, content: await resolveImageUrl(image.storageKey, image.content) };
+                    const content = await resolveCanvasImage(image.storageKey, image.content || "");
+                    return { ...image, content, ...((image.storageKey || image.content?.startsWith("blob:")) && !content ? { status: "error" as const, errorDetails: i18n.t("common.imageReadFailed") } : {}) };
                 }),
             );
             if (metadata.storageKey) {
                 void ensureImagePreview(metadata.storageKey);
-                return { ...node, metadata: { ...metadata, content: await resolveImageUrl(metadata.storageKey, content), images } };
+                const resolved = await resolveCanvasImage(metadata.storageKey, content);
+                return { ...node, metadata: { ...metadata, content: resolved, images, ...(resolved ? {} : { status: "error" as const, errorDetails: i18n.t("common.imageReadFailed") }) } };
             }
+            if (content.startsWith("blob:")) return { ...node, metadata: { ...metadata, content: "", images, status: "error" as const, errorDetails: i18n.t("common.imageReadFailed") } };
+            if (!content) return { ...node, metadata: { ...metadata, images } };
             if (!content.startsWith("data:image/")) return node;
             return { ...node, metadata: { ...metadata, ...imageMetadata(await uploadImage(content)) } };
         }),
@@ -68,7 +79,8 @@ export async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
 
 export async function hydrateAssistantImages(sessions: CanvasAssistantSession[]) {
     const hydrateItem = async <T extends { dataUrl?: string; storageKey?: string }>(item: T) => {
-        if (item.storageKey) return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
+        if (item.storageKey) return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl).catch(() => "") };
+        if (item.dataUrl?.startsWith("blob:")) return { ...item, dataUrl: "" };
         if (item.dataUrl?.startsWith("data:image/")) {
             const image = await uploadImage(item.dataUrl);
             return { ...item, dataUrl: image.url, storageKey: image.storageKey };

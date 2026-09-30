@@ -27,6 +27,7 @@ export default {
         durationMinutes: "{{minutes}}m {{seconds}}s",
         durationSeconds: "{{seconds}}s",
         imageReadFailed: "Failed to read image",
+        mediaReadFailed: "Failed to read media",
     },
     fork: {
         oidc: {
@@ -131,6 +132,7 @@ export default {
         end: "You've reached the end",
     },
     assets: {
+        storageReadFailed: "Failed to read local assets. Writing is paused to protect existing data.",
         title: "My Assets",
         description: "Save frequently used text and images, then find them quickly by type, title, or tag.",
         search: "Search titles, content, tags, or sources",
@@ -281,6 +283,7 @@ export default {
         empty: "No video generated yet",
     },
     canvas: {
+        storageReadFailed: "Failed to read local canvases. Writing is paused to protect existing data.",
         defaultTitle: "Infinite Canvas {{count}}",
         library: "Canvas library",
         title: "Infinite Canvas",
@@ -684,7 +687,7 @@ export default {
                 uploadManifest: "Uploading manifest {{size}}",
                 complete: "Complete",
             },
-            errors: { testFailed: "WebDAV connection test failed", downloadFailed: "Failed to read the WebDAV sync file", downloadTimeout: "Timed out while reading the WebDAV sync file", emptyUpload: "The upload file is empty; upload canceled", uploadFailed: "Failed to upload the WebDAV sync file", directoryFailed: "Failed to create the remote WebDAV directory", requestTimeout: "The WebDAV request timed out. Check the network or remote service.", connectionFailed: "Could not connect to WebDAV. Check the address, HTTPS certificate, CORS, and network.", urlRequired: "Enter a WebDAV URL first", authenticationFailed: "WebDAV authentication failed. Check the username, password, or app password.", pathMissing: "The WebDAV path does not exist. Check the address and remote directory.", responseFailed: "{{fallback}}: {{status}}{{detail}}", syncFailed: "Sync failed", invalidManifest: "The {{domain}} sync manifest does not belong to this app" },
+            errors: { testFailed: "WebDAV connection test failed", downloadFailed: "Failed to read the WebDAV sync file", downloadTimeout: "Timed out while reading the WebDAV sync file", emptyUpload: "The upload file is empty; upload canceled", uploadFailed: "Failed to upload the WebDAV sync file", directoryFailed: "Failed to create the remote WebDAV directory", requestTimeout: "The WebDAV request timed out. Check the network or remote service.", connectionFailed: "Could not connect to WebDAV. Check the address, HTTPS certificate, CORS, and network.", urlRequired: "Enter a WebDAV URL first", authenticationFailed: "WebDAV authentication failed. Check the username, password, or app password.", pathMissing: "The WebDAV path does not exist. Check the address and remote directory.", responseFailed: "{{fallback}}: {{status}}{{detail}}", syncFailed: "Sync failed", invalidManifest: "The {{domain}} sync manifest does not belong to this app", missingMedia: "The remote copy is missing {{count}} media files; local data was not replaced", storageMissing: "The sync data references {{count}} missing media files; the manifest was not written" },
         },
         protocols: {
         },

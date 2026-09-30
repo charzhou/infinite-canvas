@@ -194,38 +194,46 @@ async function readDomainManifest<T>(config: WebdavSyncConfig, domain: DomainKey
 async function downloadMissingFiles<T>(config: WebdavSyncConfig, domain: DomainKey, data: T, remoteFiles: AppSyncFile[], onProgress?: AppSyncProgress) {
     const remoteFileMap = new Map(remoteFiles.map((item) => [item.storageKey, item]));
     const tasks: AppSyncFile[] = [];
+    const missing: string[] = [];
     const storageKeys = collectStorageKeys(data);
     let scanned = 0;
     for (const storageKey of storageKeys) {
         const localBlob = storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
         scanned += 1;
-        if (localBlob) {
+        if (localBlob?.size) {
             emitProgress(onProgress, { domain, label: domainLabel(domain), stage: "检查缺失媒体", current: scanned, total: storageKeys.length, status: "active" });
             continue;
         }
         const remoteFile = remoteFileMap.get(storageKey);
         if (remoteFile) tasks.push(remoteFile);
+        else missing.push(storageKey);
         emitProgress(onProgress, { domain, label: domainLabel(domain), stage: "检查缺失媒体", current: scanned, total: storageKeys.length, status: "active" });
     }
     if (!tasks.length) {
+        if (missing.length) throw new Error(i18n.t("config.webdav.errors.missingMedia", { count: missing.length }));
         emitProgress(onProgress, { domain, label: domainLabel(domain), stage: "媒体已齐全", current: 1, total: 1, status: "active" });
         return;
     }
     let downloaded = 0;
     await runWithConcurrency(tasks, FILE_CONCURRENCY, async (remoteFile) => {
         const blob = await downloadWebdavFile(config, remoteFile.path);
-        if (!blob) return;
+        if (!blob || !blob.size) {
+            missing.push(remoteFile.storageKey);
+            return;
+        }
         const typedBlob = blob.type ? blob : blob.slice(0, blob.size, remoteFile.mimeType);
         await (remoteFile.storageKey.startsWith("image:") ? setImageBlob(remoteFile.storageKey, typedBlob) : setMediaBlob(remoteFile.storageKey, typedBlob));
         downloaded += 1;
         emitProgress(onProgress, { domain, label: domainLabel(domain), stage: "下载媒体", current: downloaded, total: tasks.length, status: "active" });
     });
+    if (missing.length) throw new Error(i18n.t("config.webdav.errors.missingMedia", { count: missing.length }));
 }
 
 async function uploadChangedFiles<T>(config: WebdavSyncConfig, domain: DomainKey, data: T, remoteFiles: AppSyncFile[], onProgress?: AppSyncProgress) {
     const remoteFileMap = new Map(remoteFiles.map((item) => [item.storageKey, item]));
     const files: AppSyncFile[] = [];
     const tasks: Array<{ item: AppSyncFile; blob: Blob }> = [];
+    const missing: string[] = [];
     let uploadedFiles = 0;
     let uploadedBytes = 0;
 
@@ -234,8 +242,9 @@ async function uploadChangedFiles<T>(config: WebdavSyncConfig, domain: DomainKey
     for (const storageKey of storageKeys) {
         const blob = storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
         const remoteFile = remoteFileMap.get(storageKey);
-        if (!blob) {
+        if (!blob || !blob.size) {
             if (remoteFile) files.push(remoteFile);
+            else missing.push(storageKey);
             scanned += 1;
             emitProgress(onProgress, { domain, label: domainLabel(domain), stage: "检查本地媒体", current: scanned, total: storageKeys.length, status: "active" });
             continue;
@@ -251,6 +260,8 @@ async function uploadChangedFiles<T>(config: WebdavSyncConfig, domain: DomainKey
         scanned += 1;
         emitProgress(onProgress, { domain, label: domainLabel(domain), stage: "检查本地媒体", current: scanned, total: storageKeys.length, status: "active" });
     }
+
+    if (missing.length) throw new Error(i18n.t("config.webdav.errors.storageMissing", { count: missing.length }));
 
     if (!tasks.length) {
         emitProgress(onProgress, { domain, label: domainLabel(domain), stage: "媒体无需上传", current: 1, total: 1, status: "active" });
@@ -390,12 +401,18 @@ function fileExtension(mimeType: string, storageKey: string) {
     return storageKey.startsWith("image:") ? "png" : "bin";
 }
 
-function waitForHydration<T extends { hydrated: boolean }>(store: { getState: () => T; subscribe: (listener: (state: T) => void) => () => void }) {
-    if (store.getState().hydrated) return Promise.resolve();
-    return new Promise<void>((resolve) => {
+function waitForHydration<T extends { hydrated: boolean; hydrationError?: string | null }>(store: { getState: () => T; subscribe: (listener: (state: T) => void) => () => void }) {
+    const current = store.getState();
+    if (current.hydrationError) return Promise.reject(new Error(current.hydrationError));
+    if (current.hydrated) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
         const unsubscribe = store.subscribe((state) => {
             if (!state.hydrated) return;
             unsubscribe();
+            if (state.hydrationError) {
+                reject(new Error(state.hydrationError));
+                return;
+            }
             resolve();
         });
     });

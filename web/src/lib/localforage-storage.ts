@@ -32,3 +32,18 @@ export const localForageStorage: StateStorage = {
         }
     },
 };
+
+export const strictLocalForageStorage: StateStorage = {
+    getItem: async (name) => {
+        if (typeof window === "undefined") return null;
+        return (await localforage.getItem<string>(name)) || null;
+    },
+    setItem: async (name, value) => {
+        if (typeof window === "undefined") return;
+        await localforage.setItem(name, value);
+    },
+    removeItem: async (name) => {
+        if (typeof window === "undefined") return;
+        await localforage.removeItem(name);
+    },
+};

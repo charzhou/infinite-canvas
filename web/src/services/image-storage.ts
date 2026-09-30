@@ -141,11 +141,11 @@ function throwIfAborted(signal?: AbortSignal) {
 }
 
 export async function resolveImageUrl(storageKey?: string, fallback = "") {
-    if (!storageKey) return fallback;
+    if (!storageKey) return fallback.startsWith("blob:") ? "" : fallback;
     const cached = objectUrls.get(storageKey);
     if (cached) return cached;
     const blob = await store.getItem<Blob>(storageKey);
-    if (!blob) return fallback;
+    if (!blob) return fallback.startsWith("blob:") ? "" : fallback;
     const url = URL.createObjectURL(blob);
     objectUrls.set(storageKey, url);
     return url;
@@ -223,7 +223,7 @@ export async function setImageBlob(storageKey: string, blob: Blob) {
 }
 
 export async function imageToDataUrl(image: { url?: string; dataUrl?: string; storageKey?: string }, options?: ImageReadOptions) {
-    const url = image.dataUrl || (await resolveImageUrl(image.storageKey, image.url || ""));
+    const url = image.storageKey ? await resolveImageUrl(image.storageKey, image.dataUrl || image.url || "") : image.dataUrl || image.url || "";
     if (!url || url.startsWith("data:")) return url;
     return blobToDataUrl(await fetchImageBlob(url, options));
 }

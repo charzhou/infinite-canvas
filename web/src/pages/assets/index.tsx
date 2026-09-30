@@ -1,6 +1,6 @@
 import { Copy, Download, PencilLine, Search, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { App, Button, Card, Drawer, Empty, Form, Image, Input, Modal, Pagination, Select, Space, Tag, Typography } from "antd";
+import { Alert, App, Button, Card, Drawer, Empty, Form, Image, Input, Modal, Pagination, Select, Space, Tag, Typography } from "antd";
 import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
 
@@ -34,7 +34,9 @@ export default function AssetsPage() {
     const coverInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const assetInputRef = useRef<HTMLInputElement>(null);
+    const hydrated = useAssetStore((state) => state.hydrated);
     const assets = useAssetStore((state) => state.assets);
+    const hydrationError = useAssetStore((state) => state.hydrationError);
     const addAsset = useAssetStore((state) => state.addAsset);
     const updateAsset = useAssetStore((state) => state.updateAsset);
     const removeAsset = useAssetStore((state) => state.removeAsset);
@@ -52,6 +54,7 @@ export default function AssetsPage() {
     const title = Form.useWatch("title", form) || "";
     const tags = Form.useWatch("tags", form) || [];
     const content = Form.useWatch("content", form) || "";
+    const canEdit = hydrated && !hydrationError;
     const validAssets = useMemo(() => assets.filter((asset) => asset.kind === "text" || asset.kind === "image" || asset.kind === "video"), [assets]);
 
     const filteredAssets = useMemo(() => {
@@ -74,6 +77,7 @@ export default function AssetsPage() {
     }, [filteredAssets.length, pageSize]);
 
     const openCreate = () => {
+        if (!canEdit) return;
         setEditingAsset(null);
         setImageDraft(null);
         setFormKind("text");
@@ -82,6 +86,7 @@ export default function AssetsPage() {
     };
 
     const openEdit = (asset: Asset) => {
+        if (!canEdit) return;
         setEditingAsset(asset);
         setFormKind(asset.kind);
         setImageDraft(asset.kind === "image" ? asset.data : null);
@@ -98,6 +103,7 @@ export default function AssetsPage() {
     };
 
     const saveAsset = async () => {
+        if (!canEdit) return;
         const values = await form.validateFields();
         const base = {
             title: values.title.trim(),
@@ -168,7 +174,7 @@ export default function AssetsPage() {
     };
 
     const importAssetZip = async (file?: File) => {
-        if (!file) return;
+        if (!file || !canEdit) return;
         try {
             const importedAssets = await readAssetPackage(file);
             importedAssets.forEach((asset) => {
@@ -187,7 +193,7 @@ export default function AssetsPage() {
     };
 
     const confirmDelete = () => {
-        if (!deletingAsset) return;
+        if (!deletingAsset || !canEdit) return;
         removeAsset(deletingAsset.id);
         message.success(t("assets.deleted"));
         setDeletingAsset(null);
@@ -197,6 +203,7 @@ export default function AssetsPage() {
         <div className="flex h-full flex-col overflow-hidden bg-background text-stone-900 dark:text-stone-100">
             <main className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] px-6 py-8 [background-size:16px_16px] dark:bg-[radial-gradient(rgba(245,245,244,.14)_1px,transparent_1px)]">
                 <div className="pb-8">
+                    {hydrationError ? <Alert showIcon type="error" message={t("assets.storageReadFailed")} description={hydrationError} className="mx-auto mb-6 max-w-5xl text-left" /> : null}
                     <div className="mx-auto max-w-5xl text-center">
                         <h1 className="text-4xl font-semibold tracking-tight text-stone-950 dark:text-stone-100">{t("assets.title")}</h1>
                         <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">{t("assets.description")}</p>
@@ -252,6 +259,7 @@ export default function AssetsPage() {
                                 <button
                                     type="button"
                                     className="cursor-pointer text-sm font-medium text-stone-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline dark:text-stone-300"
+                                    disabled={!canEdit}
                                     onClick={() => assetInputRef.current?.click()}
                                 >
                                     {t("assets.import")}
@@ -259,6 +267,7 @@ export default function AssetsPage() {
                                 <button
                                     type="button"
                                     className="cursor-pointer text-sm font-medium text-stone-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline dark:text-stone-300"
+                                    disabled={!canEdit}
                                     onClick={openCreate}
                                 >
                                     {t("assets.add")}
