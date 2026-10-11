@@ -59,6 +59,8 @@ export type AiConfig = {
     canvasImageCount: string;
     proxyEnabled: boolean;
     proxyUrl: string;
+    nodeRegenerateBehavior: "new-node" | "overwrite";
+    autoFocusOnSelect: boolean;
 };
 
 export type ModelRequestConfig = AiConfig & Pick<ModelChannel, "authMode" | "providerId">;
@@ -131,6 +133,8 @@ export const defaultConfig: AiConfig = {
     canvasImageCount: "3",
     proxyEnabled: false,
     proxyUrl: DEFAULT_LOCAL_PROXY_URL,
+    nodeRegenerateBehavior: "new-node",
+    autoFocusOnSelect: false,
 };
 
 export const defaultWebdavSyncConfig: WebdavSyncConfig = {
@@ -193,8 +197,13 @@ export function modelMatchesCapability(config: AiConfig, value: string, capabili
 export function resolveModelForCapability(config: AiConfig, currentModel: string | undefined, capability: ModelCapability) {
     const defaultModel = capability === "image" ? config.imageModel : capability === "video" ? config.videoModel : capability === "audio" ? config.audioModel : config.textModel;
     const fallbackModel = capability === "image" ? defaultConfig.imageModel : capability === "video" ? defaultConfig.videoModel : capability === "audio" ? defaultConfig.audioModel : defaultConfig.textModel;
-    if (currentModel && modelMatchesCapability(config, currentModel, capability)) return currentModel;
-    if (defaultModel && modelMatchesCapability(config, defaultModel, capability)) return defaultModel;
+    for (const model of [currentModel, defaultModel]) {
+        if (!model) continue;
+        const configuredCapability = modelCapabilityOf(config, model);
+        // Keep unavailable selections visible so the readiness check blocks the
+        // request. Only a known capability switch may choose another model.
+        if (!configuredCapability || configuredCapability === capability) return model;
+    }
     return fallbackModel;
 }
 
@@ -284,6 +293,8 @@ export const useConfigStore = create<ConfigStore>()(
                         canvasImageCount: config.canvasImageCount || "3",
                         proxyEnabled: Boolean(config.proxyEnabled),
                         proxyUrl: config.proxyUrl || DEFAULT_LOCAL_PROXY_URL,
+                        nodeRegenerateBehavior: config.nodeRegenerateBehavior === "overwrite" ? "overwrite" : "new-node",
+                        autoFocusOnSelect: Boolean(config.autoFocusOnSelect),
                     },
                 };
             },
