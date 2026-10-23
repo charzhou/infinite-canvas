@@ -18,8 +18,45 @@ export type CanvasResourceReference = {
     active: boolean;
 };
 
-export function buildNodeMentionReferences(node: CanvasNodeData, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    return labelResourceNodes(getMentionResourceNodes(node.id, nodes, connections), true);
+export type CanvasResourceIndex = {
+    nodeById: Map<string, CanvasNodeData>;
+    incomingByNodeId: Map<string, CanvasNodeData[]>;
+    configTargetByNodeId: Map<string, string>;
+    groupResourcesById: Map<string, CanvasNodeData[]>;
+    configInputsByNodeId: Map<string, CanvasNodeData[]>;
+};
+
+export function createCanvasResourceIndex(nodes: CanvasNodeData[], connections: CanvasConnection[]): CanvasResourceIndex {
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    const resourceIds = new Set<string>();
+    const groupResourcesById = new Map<string, CanvasNodeData[]>();
+    nodes.forEach((node) => {
+        if (!isResourceNode(node)) return;
+        resourceIds.add(node.id);
+        const groupId = node.metadata?.groupId;
+        if (!groupId) return;
+        const children = groupResourcesById.get(groupId);
+        if (children) children.push(node);
+        else groupResourcesById.set(groupId, [node]);
+    });
+    const incomingByNodeId = new Map<string, CanvasNodeData[]>();
+    const configTargetByNodeId = new Map<string, string>();
+    connections.forEach((connection) => {
+        const source = nodeById.get(connection.fromNodeId);
+        if (source && (resourceIds.has(source.id) || (source.type === CanvasNodeType.Group && groupResourcesById.has(source.id)))) {
+            const inputs = incomingByNodeId.get(connection.toNodeId);
+            if (inputs) inputs.push(source);
+            else incomingByNodeId.set(connection.toNodeId, [source]);
+        }
+        if (!configTargetByNodeId.has(connection.fromNodeId) && nodeById.get(connection.toNodeId)?.type === CanvasNodeType.Config) {
+            configTargetByNodeId.set(connection.fromNodeId, connection.toNodeId);
+        }
+    });
+    return { nodeById, incomingByNodeId, configTargetByNodeId, groupResourcesById, configInputsByNodeId: new Map() };
+}
+
+export function buildNodeMentionReferences(node: CanvasNodeData, nodes: CanvasNodeData[], connections: CanvasConnection[], index?: CanvasResourceIndex) {
+    return labelResourceNodes(getMentionResourceNodes(node.id, nodes, connections, index), true);
 }
 
 export function buildCanvasResourceReferences(nodes: CanvasNodeData[]) {
@@ -50,50 +87,41 @@ export async function resolveCanvasReferenceImages(references: CanvasResourceRef
     }));
 }
 
-export function getMentionResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    const configInputs = expandGroupResourceNodes(getConnectedConfigInputNodes(nodeId, nodes, connections), nodes);
+export function getMentionResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], index = createCanvasResourceIndex(nodes, connections)) {
+    const configInputs = expandGroupResourceNodes(getConnectedConfigInputNodes(nodeId, index), nodes, index);
     if (configInputs.length) return configInputs;
-    const ownInputs = expandGroupResourceNodes(getContextInputNodes(nodeId, nodes, connections), nodes);
+    const ownInputs = expandGroupResourceNodes(index.incomingByNodeId.get(nodeId) || [], nodes, index);
     if (ownInputs.length) return ownInputs;
-    const node = nodes.find((item) => item.id === nodeId);
+    const node = index.nodeById.get(nodeId);
     return node && isResourceNode(node) ? [node] : [];
 }
 
-export function getGenerationResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    const configInputs = getConnectedConfigInputNodes(nodeId, nodes, connections);
+export function getGenerationResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], index = createCanvasResourceIndex(nodes, connections)) {
+    const configInputs = getConnectedConfigInputNodes(nodeId, index);
     if (configInputs.length) return configInputs;
-    const ownInputs = getContextInputNodes(nodeId, nodes, connections);
-    if (ownInputs.length) return ownInputs;
-    return [];
+    return index.incomingByNodeId.get(nodeId) || [];
 }
 
-function getContextInputNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    return connections
-        .filter((connection) => connection.toNodeId === nodeId)
-        .map((connection) => nodes.find((node) => node.id === connection.fromNodeId))
-        .filter((node): node is CanvasNodeData => Boolean(node && isCanvasReferenceNode(node, nodes)));
+function getConnectedConfigInputNodes(nodeId: string, index: CanvasResourceIndex) {
+    const cached = index.configInputsByNodeId.get(nodeId);
+    if (cached) return cached;
+    const configId = index.configTargetByNodeId.get(nodeId);
+    const inputs = configId ? (index.incomingByNodeId.get(configId) || []).filter((node) => node.id !== nodeId) : [];
+    index.configInputsByNodeId.set(nodeId, inputs);
+    return inputs;
 }
 
-function getConnectedConfigInputNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    const configConnection = connections.find((connection) => connection.fromNodeId === nodeId && nodes.find((node) => node.id === connection.toNodeId)?.type === CanvasNodeType.Config);
-    if (!configConnection) return [];
-    return getContextInputNodes(configConnection.toNodeId, nodes, connections).filter((node) => node.id !== nodeId);
+export function isCanvasReferenceNode(node: CanvasNodeData, nodes: CanvasNodeData[], index?: CanvasResourceIndex) {
+    return isResourceNode(node) || (node.type === CanvasNodeType.Group && getGroupResourceNodes(node.id, nodes, index).length > 0);
 }
 
-function hasGroupResources(node: CanvasNodeData, nodes: CanvasNodeData[]) {
-    return node.type === CanvasNodeType.Group && getGroupResourceNodes(node.id, nodes).length > 0;
-}
-
-export function isCanvasReferenceNode(node: CanvasNodeData, nodes: CanvasNodeData[]) {
-    return isResourceNode(node) || hasGroupResources(node, nodes);
-}
-
-function expandGroupResourceNodes(inputNodes: CanvasNodeData[], nodes: CanvasNodeData[]) {
-    const resources = inputNodes.flatMap((node) => (node.type === CanvasNodeType.Group ? getGroupResourceNodes(node.id, nodes) : [node]));
+function expandGroupResourceNodes(inputNodes: CanvasNodeData[], nodes: CanvasNodeData[], index: CanvasResourceIndex) {
+    const resources = inputNodes.flatMap((node) => (node.type === CanvasNodeType.Group ? getGroupResourceNodes(node.id, nodes, index) : [node]));
     return [...new Map(resources.map((node) => [node.id, node])).values()];
 }
 
-export function getGroupResourceNodes(groupId: string, nodes: CanvasNodeData[]) {
+export function getGroupResourceNodes(groupId: string, nodes: CanvasNodeData[], index?: CanvasResourceIndex) {
+    if (index) return index.groupResourcesById.get(groupId) || [];
     return nodes.filter((node) => node.metadata?.groupId === groupId && isResourceNode(node));
 }
 

@@ -144,6 +144,7 @@ export type ConnectionHandle = {
 };
 
 export type SelectionBox = {
+    pointerId: number;
     startWorldX: number;
     startWorldY: number;
     currentWorldX: number;
