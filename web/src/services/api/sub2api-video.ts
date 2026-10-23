@@ -16,17 +16,12 @@ type XaiVideoTask = { request_id?: string; status?: "pending" | "done" | "failed
 type ApiVideoResponse = OpenAIVideoTask | { code?: number | string; data?: OpenAIVideoTask | null; msg?: string; message?: string; error?: { message?: string } };
 type GatewayFileResponse = { id?: string; data?: { id?: string } | null; error?: { message?: string } | string; message?: string };
 type CangyuanMediaReference = string | { file_id: string };
-const CANGYUAN_VIDEO_MODELS = new Set(["seedance-2.0", "seedance-2.0-mini", "seedance-2.0-fast", "seedance-2.5", "minimax-h3"]);
 const CANGYUAN_FILE_UPLOAD_MAX_ATTEMPTS = 3;
 const CANGYUAN_FILE_UPLOAD_RETRY_DELAY_MS = 500;
 const gatewayFileCache = new Map<string, string>();
 const gatewayFileUploads = new Map<string, Promise<string>>();
 const apiText = (key: string) => i18n.t(`apiErrors.${key}`);
 const forkVideoText = (key: string) => i18n.t(`fork.video.${key}`);
-
-export function isCangyuanVideoModel(model: string) {
-    return CANGYUAN_VIDEO_MODELS.has(modelOptionName(model).toLowerCase());
-}
 
 export function cangyuanImageReferenceLimit(mode: string | undefined) {
     return mode === "reference" ? 9 : 2;
@@ -35,9 +30,7 @@ export function cangyuanImageReferenceLimit(mode: string | undefined) {
 export async function createSub2ApiVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
     return config.apiFormat === "xai"
         ? createSub2ApiXaiVideoTask(config, model, prompt, references, options)
-        : isCangyuanVideoModel(model)
-            ? createSub2ApiCangyuanVideoTask(config, model, prompt, references, options)
-            : createSub2ApiOpenAIVideoTask(config, model, prompt, references, options);
+        : createSub2ApiCangyuanVideoTask(config, model, prompt, references, options);
 }
 
 export async function pollSub2ApiVideoTask(config: ModelRequestConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
@@ -70,24 +63,6 @@ async function createSub2ApiCangyuanVideoTask(config: ModelRequestConfig, model:
         if (videoUrls.length) payload.reference_videos = videoUrls;
         if (audioUrls.length) payload.reference_audios = audioUrls;
         const created = unwrapVideoResponse((await axios.post<ApiVideoResponse>(apiUrl(config, "/videos"), payload, requestOptions(config, "application/json", options))).data);
-        if (!created.id) throw new Error(apiText("noVideoTaskId"));
-        return { id: created.id, provider: "openai", model, adapter: "sub2api" };
-    } catch (error) {
-        throw new Error(readAxiosError(error, apiText("videoTaskCreateFailed")));
-    }
-}
-
-async function createSub2ApiOpenAIVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
-    try {
-        const imageUrls = await Promise.all(references.map((image) => imageToDataUrl(image)));
-        const created = unwrapVideoResponse((await axios.post<ApiVideoResponse>(apiUrl(config, "/videos"), {
-            model: modelOptionName(model),
-            prompt,
-            seconds: normalizeOpenAiSeconds(config.videoSeconds),
-            size: normalizeVideoSize(config.size),
-            preset: "normal",
-            ...(imageUrls.length ? { input_reference: imageUrls.map((image_url) => ({ type: "image", image_url })) } : {}),
-        }, requestOptions(config, "application/json", options))).data);
         if (!created.id) throw new Error(apiText("noVideoTaskId"));
         return { id: created.id, provider: "openai", model, adapter: "sub2api" };
     } catch (error) {
@@ -254,10 +229,6 @@ function delay(ms: number, signal?: AbortSignal) {
 
 function normalizeCangyuanSeconds(value: string) {
     return Math.max(1, Math.min(30, Math.floor(Number(value) || 6)));
-}
-
-function normalizeOpenAiSeconds(value: string) {
-    return String(Math.max(1, Math.min(20, Math.floor(Number(value) || 6))));
 }
 
 function normalizeXaiSeconds(value: string) {

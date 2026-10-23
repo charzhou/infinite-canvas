@@ -16,7 +16,6 @@ vi.mock("@/services/image-storage", async () => {
 
 import axios from "axios";
 
-import { isCangyuanVideoModel } from "./sub2api-video";
 import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, videoPollDelay, videoPollTimeoutMs } from "./video";
 import { defaultConfig, type AiConfig } from "@/stores/use-config-store";
 
@@ -33,11 +32,6 @@ const sub2ApiOpenAiConfig = {
     videoModel: "sub2api::video-model",
     channels: [{ id: "sub2api", name: "Sub2API", baseUrl: "/api/oidc/proxy", apiKey: "", apiFormat: "openai", authMode: "oidc", providerId: "sub2api", models: [{ name: "video-model", capability: "video" }] }],
 } as AiConfig;
-
-it("routes supported Sub2API models through the Cangyuan video contract", () => {
-    expect(isCangyuanVideoModel("seedance-2.5")).toBe(true);
-    expect(isCangyuanVideoModel("minimax-h3")).toBe(true);
-});
 
 const sub2ApiSeedanceConfig = {
     ...defaultConfig,
@@ -103,15 +97,19 @@ it("uses only the first image for Sub2API xAI first-frame mode", async () => {
     expect(payload).not.toHaveProperty("reference_images");
 });
 
-it("uses a JSON OpenAI video payload for Sub2API", async () => {
+it.each(["oidc", "manual"] as const)("uses the Cangyuan video contract for an arbitrary Sub2API model with %s auth", async (authMode) => {
     vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
-    const image = { id: "image-1", name: "ref.png", type: "image/png", dataUrl: "data:image/png;base64,AA==" };
+    const image = { id: "image-1", name: "ref.png", type: "image/png", url: "https://assets.example.com/ref.png", dataUrl: "" };
+    const config = {
+        ...sub2ApiOpenAiConfig,
+        channels: [{ ...sub2ApiOpenAiConfig.channels[0], authMode, apiKey: authMode === "manual" ? "sk-test" : "" }],
+    } as AiConfig;
 
-    await expect(createVideoGenerationTask(sub2ApiOpenAiConfig, "测试视频", [image])).resolves.toEqual({ id: "video-task", provider: "openai", model: "sub2api::video-model", adapter: "sub2api" });
+    await expect(createVideoGenerationTask(config, "测试视频", [image])).resolves.toEqual({ id: "video-task", provider: "openai", model: "sub2api::video-model", adapter: "sub2api" });
     expect(axios.post).toHaveBeenCalledWith(
         "/api/oidc/proxy/v1/videos",
-        { model: "video-model", prompt: "测试视频", seconds: "6", size: "1280x720", preset: "normal", input_reference: [{ type: "image", image_url: image.dataUrl }] },
-        { headers: { Authorization: "Bearer ", "Content-Type": "application/json" }, signal: undefined },
+        { model: "video-model", prompt: "测试视频", duration: 6, aspect_ratio: "1:1", resolution: "720p", generate_audio: true, first_image_url: image.url },
+        { headers: { Authorization: authMode === "manual" ? "Bearer sk-test" : "Bearer ", "Content-Type": "application/json" }, signal: undefined },
     );
 });
 
@@ -148,17 +146,17 @@ it("gives MiniMax H3 the same Sub2API Cangyuan video behavior", async () => {
     expect(vi.mocked(axios.post).mock.lastCall?.[1]).toEqual({ model: "minimax-h3", prompt: "测试视频", duration: 6, aspect_ratio: "1:1", resolution: "720p", generate_audio: true });
 });
 
-it("limits Sub2API Seedance frame mode to two images and reference mode to nine", async () => {
+it("limits arbitrary Sub2API video models to two frame images or nine references", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
     const image = { id: "image-1", name: "first.png", type: "image/png", url: "https://assets.example.com/first.png", dataUrl: "" };
     const secondImage = { ...image, id: "image-2", url: "https://assets.example.com/last.png" };
     const images = Array.from({ length: 10 }, (_, index) => ({ ...image, id: `image-${index + 1}`, url: `https://assets.example.com/${index + 1}.png` }));
 
-    await createVideoGenerationTask(sub2ApiSeedanceConfig, "首尾帧", [image, secondImage, images[2]]);
+    await createVideoGenerationTask(sub2ApiOpenAiConfig, "首尾帧", [image, secondImage, images[2]]);
     expect(vi.mocked(axios.post).mock.lastCall?.[1]).toMatchObject({ first_image_url: image.url, last_image_url: secondImage.url });
     expect(vi.mocked(axios.post).mock.lastCall?.[1]).not.toHaveProperty("reference_image_urls");
 
-    await createVideoGenerationTask({ ...sub2ApiSeedanceConfig, videoMode: "reference" }, "多图参考", images);
+    await createVideoGenerationTask({ ...sub2ApiOpenAiConfig, videoMode: "reference" }, "多图参考", images);
     expect(vi.mocked(axios.post).mock.lastCall?.[1]).toMatchObject({ reference_image_urls: images.slice(0, 9).map((item) => item.url) });
 });
 
@@ -175,10 +173,10 @@ it("rejects a Sub2API Seedance response without a gateway task id", async () => 
     await expect(createVideoGenerationTask(sub2ApiSeedanceConfig, "文生视频")).rejects.toThrow("视频接口没有返回任务 ID");
 });
 
-it("sends public HTTPS media references for Sub2API Seedance", async () => {
+it("sends public HTTPS media references for arbitrary Sub2API video models", async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: { id: "video-task" } });
 
-    await createVideoGenerationTask(sub2ApiSeedanceConfig, "参考素材", [], {
+    await createVideoGenerationTask(sub2ApiOpenAiConfig, "参考素材", [], {
         videos: [{ id: "v1", name: "clip.mp4", type: "video/mp4", url: "https://assets.example.com/clip.mp4" }],
         audios: [{ id: "a1", name: "ambient.mp3", type: "audio/mpeg", url: "https://assets.example.com/ambient.mp3" }],
     });
@@ -188,13 +186,13 @@ it("sends public HTTPS media references for Sub2API Seedance", async () => {
     });
 });
 
-it("uploads local Seedance reference media through the gateway Files API", async () => {
+it("uploads arbitrary Sub2API video model reference media through the gateway Files API", async () => {
     vi.mocked(axios.post)
         .mockResolvedValueOnce({ data: { id: "file-video" } })
         .mockResolvedValueOnce({ data: { id: "file-audio" } })
         .mockResolvedValueOnce({ data: { id: "video-task" } });
 
-    await createVideoGenerationTask(sub2ApiSeedanceConfig, "本地素材", [], {
+    await createVideoGenerationTask(sub2ApiOpenAiConfig, "本地素材", [], {
         videos: [{ id: "v1", name: "clip.mp4", type: "video/mp4", storageKey: "video:local", url: "blob:https://localhost/clip" }],
         audios: [{ id: "a1", name: "ambient.mp3", type: "audio/mpeg", storageKey: "audio:local", url: "blob:https://localhost/audio" }],
     });

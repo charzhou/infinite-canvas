@@ -16,7 +16,7 @@ import { formatBytes, formatDuration } from "@/lib/image-utils";
 import { deleteStoredMedia, resolveMediaUrl, uploadMediaFile } from "@/services/file-storage";
 import { resolveImageUrl, ensureImagePreview, previewUrlFor, getImagePreviewRevision, subscribeImagePreviews, uploadImage } from "@/services/image-storage";
 import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, videoPollDelay, videoPollTimeoutMs, type VideoGenerationTask } from "@/services/api/video";
-import { cangyuanImageReferenceLimit, isCangyuanVideoModel } from "@/services/api/sub2api-video";
+import { cangyuanImageReferenceLimit } from "@/services/api/sub2api-video";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
 import { boolConfig, isXaiModelConfig, modelOptionLabel, resolveModelRequestConfig, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
@@ -116,7 +116,8 @@ export default function VideoPage() {
     const agentTaskIdRef = useRef<string | undefined>(undefined);
 
     const model = effectiveConfig.videoModel || effectiveConfig.model;
-    const supportsCangyuanReferences = resolveModelRequestConfig(effectiveConfig, model).providerId === "sub2api" && isCangyuanVideoModel(model);
+    const modelConfig = resolveModelRequestConfig(effectiveConfig, model);
+    const supportsCangyuanReferences = modelConfig.providerId === "sub2api" && modelConfig.apiFormat !== "xai";
     const maxImageReferences = supportsCangyuanReferences ? cangyuanImageReferenceLimit(effectiveConfig.videoMode) : MAX_DEFAULT_IMAGE_REFERENCES;
     const maxImageReferencesRef = useRef(maxImageReferences);
     maxImageReferencesRef.current = maxImageReferences;
