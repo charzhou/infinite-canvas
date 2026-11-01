@@ -218,9 +218,9 @@ export function resolveModelScript(config: AiConfig, value: string) {
     return findChannelModel(config, value)?.model.script?.trim() || "";
 }
 
-function isAiConfigReady(config: AiConfig, model: string) {
-    const channel = resolveModelChannel(config, model);
-    return Boolean(model.trim() && channel.baseUrl.trim() && (channel.authMode === "oidc" || channel.apiKey.trim()));
+export function isAiConfigReady(config: AiConfig, model: string) {
+    const channel = findChannelModel(config, model)?.channel;
+    return Boolean(model.trim() && channel?.baseUrl.trim() && (channel.authMode === "oidc" || channel.apiKey.trim()));
 }
 
 export const useConfigStore = create<ConfigStore>()(
@@ -509,7 +509,7 @@ function applyDescriptorDefaults(config: AiConfig, defaults: Sub2ApiChannelDescr
     }, config);
 }
 
-export function isXaiModelConfig(config: AiConfig, value = config.videoModel || config.model) {
+export function isXaiModelConfig(config: AiConfig, value: string) {
     return resolveModelRequestConfig(config, value).apiFormat === "xai";
 }
 

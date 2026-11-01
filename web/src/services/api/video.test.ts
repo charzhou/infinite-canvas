@@ -47,6 +47,18 @@ const genericXaiConfig = {
 
 beforeEach(() => vi.clearAllMocks());
 
+it.each(["removed::video-model", "sub2api::deleted-model"])("does not query another channel for unavailable task model %s", async (model) => {
+    await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "saved-task", provider: "openai", model, adapter: "sub2api" })).rejects.toThrow();
+    expect(axios.get).not.toHaveBeenCalled();
+});
+
+it("queries the saved task model after the current selection changes", async () => {
+    vi.mocked(axios.get).mockResolvedValue({ data: { status: "running" } });
+    const config = { ...sub2ApiOpenAiConfig, model: "other::new-video", videoModel: "other::new-video" };
+    await expect(pollVideoGenerationTask(config, { id: "saved-task", provider: "openai", model: sub2ApiOpenAiConfig.model, adapter: "sub2api" })).resolves.toEqual({ status: "pending" });
+    expect(axios.get).toHaveBeenCalledWith("/api/oidc/proxy/v1/videos/saved-task", expect.any(Object));
+});
+
 it("increases pending video polling delays exponentially with a cap", () => {
     expect(videoPollDelay(0)).toBe(5000);
     expect(videoPollDelay(1)).toBe(10000);

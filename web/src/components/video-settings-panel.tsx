@@ -32,7 +32,7 @@ type VideoSettingsPanelProps = {
 
 export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: VideoSettingsPanelProps) {
     const { t } = useTranslation();
-    const xaiModel = isXaiModelConfig(config);
+    const xaiModel = isXaiModelConfig(config, config.model || config.videoModel);
     const maxSeconds = xaiModel ? 15 : VIDEO_SECONDS_MAX;
     const seconds = Math.min(Number(clampVideoSeconds(config.videoSeconds || "6")), maxSeconds);
     const videoMode = normalizeVideoModeValue(config.videoMode);

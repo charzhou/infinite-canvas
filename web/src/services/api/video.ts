@@ -6,7 +6,7 @@ import { dataUrlToFile, readFileAsDataUrl } from "@/lib/image-utils";
 import { clampVideoSeconds, computeVideoSize, inferVideoRatio } from "@/lib/media-size";
 import { getMediaBlob, resolveMediaUrl, storeMediaFile, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { imageToDataUrl } from "@/services/image-storage";
-import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, withLocalProxy, type AiConfig, type ModelRequestConfig } from "@/stores/use-config-store";
+import { boolConfig, buildApiUrl, isAiConfigReady, modelOptionName, resolveModelRequestConfig, resolveModelScript, withLocalProxy, type AiConfig, type ModelRequestConfig } from "@/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
 import { createSub2ApiVideoTask, pollSub2ApiVideoTask } from "./sub2api-video";
 import type { ReferenceImage } from "@/types/image";
@@ -100,6 +100,7 @@ export async function pollVideoGenerationTask(config: AiConfig, task: VideoGener
         const result = pluginVideoResults.get(task.id);
         return result ? { status: "completed", result } : { status: "failed", error: apiText("pluginVideoExpired") };
     }
+    if (!isAiConfigReady(config, task.model)) throw new Error(i18n.t("workbench.configFirst"));
     const requestConfig = resolveModelRequestConfig(config, task.model);
     assertVideoConfig(requestConfig, requestConfig.model);
     if (task.adapter === "sub2api") return pollSub2ApiVideoTask(requestConfig, task, options);

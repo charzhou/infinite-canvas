@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { boolConfig, createModelChannel, defaultConfig, importSub2ApiChannel, normalizeAiConfig, removeOidcChannel, resolveModelRequestConfig, selectableModelsByCapability, type AiConfig, type ModelChannel } from "./use-config-store";
+import { boolConfig, createModelChannel, defaultConfig, importSub2ApiChannel, isAiConfigReady, normalizeAiConfig, removeOidcChannel, resolveModelRequestConfig, selectableModelsByCapability, type AiConfig, type ModelChannel } from "./use-config-store";
 
 const configWithOidcGrokVideo = {
     channels: [
@@ -27,6 +27,12 @@ it("parses persisted boolean config values with a fallback", () => {
 
 it("uses a model api format over the managed channel default", () => {
     expect(resolveModelRequestConfig(configWithOidcGrokVideo, "sub2api::grok-imagine-video").apiFormat).toBe("xai");
+});
+
+it("requires the selected model to exist even when another channel has valid authorization", () => {
+    expect(isAiConfigReady(configWithOidcGrokVideo, "removed::grok-imagine-video")).toBe(false);
+    expect(isAiConfigReady(configWithOidcGrokVideo, "sub2api::deleted-model")).toBe(false);
+    expect(isAiConfigReady(configWithOidcGrokVideo, "sub2api::grok-imagine-video")).toBe(true);
 });
 
 it("keeps the managed Sub2API provider on resolved model config", () => {
