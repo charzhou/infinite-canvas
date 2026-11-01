@@ -16,7 +16,7 @@ vi.mock("@/services/image-storage", async () => {
 
 import axios from "axios";
 
-import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, videoPollDelay, videoPollTimeoutMs } from "./video";
+import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, videoPollDelay, videoPollTimeoutMs, waitForVideoGenerationTask } from "./video";
 import { defaultConfig, type AiConfig } from "@/stores/use-config-store";
 
 const oidcXaiConfig = {
@@ -46,6 +46,56 @@ const genericXaiConfig = {
 } as AiConfig;
 
 beforeEach(() => vi.clearAllMocks());
+
+const arkConfig: AiConfig = {
+    ...sub2ApiSeedanceConfig,
+    channels: [{ ...sub2ApiSeedanceConfig.channels[0], models: [{ name: "seedance-2.0", capability: "video", apiFormat: "ark" }] }],
+};
+const arkTask = { id: "video_11111111-1111-4111-8111-111111111111", model: arkConfig.model, provider: "ark" as const, adapter: "sub2api" as const };
+
+it("keeps the saved Ark task protocol after its model configuration changes", async () => {
+    vi.mocked(axios.get).mockResolvedValueOnce({ data: { id: arkTask.id, status: "running" } });
+    await expect(pollVideoGenerationTask(sub2ApiSeedanceConfig, arkTask)).resolves.toEqual({ status: "pending" });
+    expect(axios.get).toHaveBeenCalledWith(`/api/oidc/proxy/api/v3/contents/generations/tasks/${arkTask.id}`, expect.any(Object));
+});
+
+it("rejects Ark outside the managed provider before creating a task", async () => {
+    const config = { ...arkConfig, channels: [{ ...arkConfig.channels[0], providerId: undefined }] };
+    await expect(createVideoGenerationTask(config, "视频")).rejects.toThrow();
+    expect(axios.post).not.toHaveBeenCalled();
+});
+
+it("backs off a temporary Ark query error and downloads without creating again", async () => {
+    vi.useFakeTimers();
+    vi.mocked(axios.isAxiosError).mockReturnValue(true);
+    vi.mocked(axios.get)
+        .mockRejectedValueOnce({ response: { status: 429, headers: { "retry-after": "8" } } })
+        .mockResolvedValueOnce({ data: { id: arkTask.id, status: "succeeded", content: { video_url: "https://media.example/video.mp4" } } })
+        .mockResolvedValueOnce({ data: new Blob(["video"], { type: "video/mp4" }) });
+    try {
+        const result = waitForVideoGenerationTask(arkConfig, arkTask);
+        await vi.advanceTimersByTimeAsync(7_999);
+        expect(axios.get).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect((await result).blob).toBeInstanceOf(Blob);
+        expect(axios.post).not.toHaveBeenCalled();
+    } finally {
+        vi.useRealTimers();
+        vi.mocked(axios.isAxiosError).mockReturnValue(false);
+    }
+});
+
+it("stops the shared poll loop when the gateway pauses an Ark task", async () => {
+    vi.mocked(axios.isAxiosError).mockReturnValue(true);
+    vi.mocked(axios.get).mockRejectedValueOnce({ response: { status: 503, data: { error: { code: "video_polling_paused" } } } });
+    try {
+        await expect(waitForVideoGenerationTask(arkConfig, arkTask)).rejects.toMatchObject({ name: "VideoPollingPaused" });
+        expect(axios.get).toHaveBeenCalledTimes(1);
+        expect(axios.post).not.toHaveBeenCalled();
+    } finally {
+        vi.mocked(axios.isAxiosError).mockReturnValue(false);
+    }
+});
 
 it.each(["removed::video-model", "sub2api::deleted-model"])("does not query another channel for unavailable task model %s", async (model) => {
     await expect(pollVideoGenerationTask(sub2ApiOpenAiConfig, { id: "saved-task", provider: "openai", model, adapter: "sub2api" })).rejects.toThrow();

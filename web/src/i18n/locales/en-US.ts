@@ -51,6 +51,7 @@ export default {
             authorize: "Authorize and connect",
         },
         sub2api: {
+            arkProtocol: "Ark (Seedance)",
             displayName: "Compute Access",
             invalidLink: "The Compute Access authorization link is invalid",
             noModels: "Compute Access did not return any available models",
@@ -79,6 +80,12 @@ export default {
             connectionSwitchFailed: "Could not switch the Compute Access connection. The current connection was kept.",
         },
         video: {
+            arkProviderRequired: "Ark is available only for video models on Compute Access channels",
+            arkFramesReferencesUnsupported: "Switch to omni-reference mode to use reference videos or audio",
+            arkReferenceLimit: "Reference limit exceeded: up to 2 frame images, or 9 images, 3 videos and 3 audio clips in omni-reference mode",
+            arkInvalidResponse: "The Ark video API returned an invalid task response",
+            arkPollingPaused: "Task polling is paused. Contact an administrator and do not create the video again",
+            arkTaskCreateUncertain: "The video submission outcome is unknown. Keep the request record, contact an administrator, and do not submit again",
             xaiReferencesUnsupported: "The xAI video API does not support reference video or audio. Remove those reference assets.",
             xaiNoTaskId: "The xAI video API did not return a task ID",
             xaiTaskCreateFailed: "Failed to create xAI video task",

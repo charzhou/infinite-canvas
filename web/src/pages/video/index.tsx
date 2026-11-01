@@ -15,7 +15,7 @@ import { clampVideoSeconds } from "@/lib/media-size";
 import { formatBytes, formatDuration } from "@/lib/image-utils";
 import { deleteStoredMedia, resolveMediaUrl, uploadMediaFile } from "@/services/file-storage";
 import { resolveImageUrl, ensureImagePreview, previewUrlFor, getImagePreviewRevision, subscribeImagePreviews, uploadImage } from "@/services/image-storage";
-import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, videoPollDelay, videoPollTimeoutMs, type VideoGenerationTask } from "@/services/api/video";
+import { createVideoGenerationTask, isVideoPollingPaused, isVideoTaskFailed, storeGeneratedVideo, waitForVideoGenerationTask, type VideoGenerationTask } from "@/services/api/video";
 import { cangyuanImageReferenceLimit } from "@/services/api/sub2api-video";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
@@ -60,6 +60,7 @@ type GenerationLog = {
     seconds: string;
     status: "pending" | "success" | "failed";
     task?: VideoGenerationTask;
+    pollingPaused?: boolean;
     video?: GeneratedVideo;
     error?: string;
 };
@@ -117,15 +118,15 @@ export default function VideoPage() {
 
     const model = effectiveConfig.videoModel || effectiveConfig.model;
     const modelConfig = resolveModelRequestConfig(effectiveConfig, model);
-    const supportsCangyuanReferences = modelConfig.providerId === "sub2api" && modelConfig.apiFormat !== "xai";
-    const maxImageReferences = supportsCangyuanReferences ? cangyuanImageReferenceLimit(effectiveConfig.videoMode) : MAX_DEFAULT_IMAGE_REFERENCES;
+    const supportsMediaReferences = modelConfig.providerId === "sub2api" && modelConfig.apiFormat !== "xai";
+    const maxImageReferences = supportsMediaReferences ? cangyuanImageReferenceLimit(effectiveConfig.videoMode) : MAX_DEFAULT_IMAGE_REFERENCES;
     const maxImageReferencesRef = useRef(maxImageReferences);
     maxImageReferencesRef.current = maxImageReferences;
     const canGenerate = Boolean(prompt.trim());
 
     useEffect(() => {
-        setReferences((value) => value.length > maxImageReferences ? value.slice(0, maxImageReferences) : value);
-    }, [maxImageReferences]);
+        if (modelConfig.apiFormat !== "ark") setReferences((value) => value.length > maxImageReferences ? value.slice(0, maxImageReferences) : value);
+    }, [maxImageReferences, modelConfig.apiFormat]);
 
     useEffect(() => {
         if (!running || !startedAt) return;
@@ -286,7 +287,7 @@ export default function VideoPage() {
             openConfigDialog(true);
             return null;
         }
-        return { text, config: buildVideoConfig(effectiveConfig, model), references: references.slice(0, maxImageReferences), videoReferences: supportsCangyuanReferences ? [...videoReferences] : [], audioReferences: supportsCangyuanReferences ? [...audioReferences] : [] };
+        return { text, config: buildVideoConfig(effectiveConfig, model), references: modelConfig.apiFormat === "ark" ? [...references] : references.slice(0, maxImageReferences), videoReferences: supportsMediaReferences ? [...videoReferences] : [], audioReferences: supportsMediaReferences ? [...audioReferences] : [] };
     };
 
     const retryResult = () => {
@@ -325,7 +326,7 @@ export default function VideoPage() {
             }
             const stored = await uploadImage(payload.dataUrl);
             setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }].slice(0, maxImageReferencesRef.current));
-        } else if (payload.kind === "video" && supportsCangyuanReferences) {
+        } else if (payload.kind === "video" && supportsMediaReferences) {
             const url = await resolveMediaUrl(payload.storageKey, payload.url);
             setVideoReferences((value) => [...value, { id: nanoid(), name: payload.title, type: "video/mp4", url, storageKey: payload.storageKey, width: payload.width, height: payload.height }].slice(0, MAX_MEDIA_REFERENCES));
         }
@@ -384,7 +385,7 @@ export default function VideoPage() {
 
     const resumePendingLogs = (items: GenerationLog[]) => {
         for (const log of items) {
-            if (log.status === "pending" && log.task) void pollGenerationLog(log);
+            if (log.status === "pending" && log.task && !log.pollingPaused) void pollGenerationLog(log);
         }
     };
 
@@ -395,41 +396,29 @@ export default function VideoPage() {
         setStartedAt((value) => value || performance.now());
         setResults((value) => (value.length ? value : [{ id: log.id, status: "pending" }]));
         const taskConfig = buildVideoConfig({ ...effectiveConfig, ...log.config }, log.task.model || log.model);
-        let terminalFailure = false;
         try {
-            const deadline = Date.now() + videoPollTimeoutMs();
-            for (let attempt = 0; ; attempt += 1) {
-                const state = await pollVideoGenerationTask(configOverride || taskConfig, log.task);
-                if (state.status === "completed") {
-                    const stored = await storeGeneratedVideo(state.result);
-                    const nextVideo: GeneratedVideo = {
-                        id: nanoid(),
-                        url: stored.url,
-                        storageKey: stored.storageKey,
-                        durationMs: Date.now() - log.createdAt,
-                        width: stored.width || 1280,
-                        height: stored.height || 720,
-                        bytes: stored.bytes,
-                        mimeType: stored.mimeType,
-                    };
-                    setResults([{ id: nextVideo.id, status: "success", video: nextVideo }]);
-                    setPreviewLog((current) => current?.id === log.id ? { ...log, status: "success", durationMs: nextVideo.durationMs, video: nextVideo, error: undefined } : current);
-                    if (agentTaskId) updateAgentTask(agentTaskId, { status: "succeeded", successCount: 1, failCount: 0, error: undefined });
-                    await saveLog({ ...log, status: "success", durationMs: nextVideo.durationMs, video: nextVideo, error: undefined });
-                    message.success(t("videoWorkbench.generated"));
-                    return;
-                }
-                if (state.status === "failed") {
-                    terminalFailure = true;
-                    throw new Error(state.error);
-                }
-                const waitMs = videoPollDelay(attempt);
-                if (Date.now() + waitMs >= deadline) throw new Error(t("videoWorkbench.timeout"));
-                await delay(waitMs);
-            }
+            if (log.pollingPaused || log.error) await saveLog({ ...log, pollingPaused: false, error: undefined }, false);
+            const result = await waitForVideoGenerationTask(configOverride || taskConfig, log.task);
+            const stored = await storeGeneratedVideo(result);
+            const nextVideo: GeneratedVideo = {
+                id: nanoid(),
+                url: stored.url,
+                storageKey: stored.storageKey,
+                durationMs: Date.now() - log.createdAt,
+                width: stored.width || 1280,
+                height: stored.height || 720,
+                bytes: stored.bytes,
+                mimeType: stored.mimeType,
+            };
+            const completed = { ...log, status: "success" as const, pollingPaused: false, durationMs: nextVideo.durationMs, video: nextVideo, error: undefined };
+            setResults([{ id: nextVideo.id, status: "success", video: nextVideo }]);
+            setPreviewLog((current) => current?.id === log.id ? completed : current);
+            if (agentTaskId) updateAgentTask(agentTaskId, { status: "succeeded", successCount: 1, failCount: 0, error: undefined });
+            await saveLog(completed);
+            message.success(t("videoWorkbench.generated"));
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : t("workbench.generationFailed");
-            const nextLog = { ...log, status: terminalFailure ? "failed" : "pending", durationMs: Date.now() - log.createdAt, error: errorMessage } satisfies GenerationLog;
+            const nextLog = { ...log, status: isVideoTaskFailed(error) ? "failed" : "pending", pollingPaused: isVideoPollingPaused(error), durationMs: Date.now() - log.createdAt, error: errorMessage } satisfies GenerationLog;
             setResults([{ id: log.id, status: "failed", error: errorMessage }]);
             setPreviewLog(nextLog);
             if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", successCount: 0, failCount: 1, error: errorMessage });
@@ -458,7 +447,7 @@ export default function VideoPage() {
         if (log.config.videoGenerateAudio) updateConfig("videoGenerateAudio", log.config.videoGenerateAudio);
         if (log.config.videoWatermark) updateConfig("videoWatermark", log.config.videoWatermark);
         if (log.config.videoMode) updateConfig("videoMode", log.config.videoMode);
-        setResults(log.status === "pending" ? [{ id: log.id, status: "pending" }] : log.video ? [{ id: log.video.id, status: "success", video: log.video }] : [{ id: log.id, status: "failed", error: log.error || t("workbench.generationFailed") }]);
+        setResults(log.status === "pending" && !log.pollingPaused && !log.error ? [{ id: log.id, status: "pending" }] : log.video ? [{ id: log.video.id, status: "success", video: log.video }] : [{ id: log.id, status: "failed", error: log.error || t("workbench.generationFailed") }]);
     };
 
     return (
@@ -534,7 +523,7 @@ export default function VideoPage() {
                                 </div>
                             </div>
 
-                            {supportsCangyuanReferences ? <>
+                            {supportsMediaReferences ? <>
                             <ReferenceMediaSection
                                 kind="video"
                                 items={videoReferences}
@@ -911,6 +900,7 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
         seconds: log.seconds || config.videoSeconds || "",
         status: log.status || "success",
         task: log.task,
+        pollingPaused: log.pollingPaused,
         video,
         error: log.error,
     };
@@ -1040,6 +1030,3 @@ function normalizeResolution(value: string) {
     return normalizeVideoResolutionValue(value);
 }
 
-function delay(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}

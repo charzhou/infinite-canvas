@@ -175,6 +175,7 @@ test("model catalog is public but authorization rejects unknown model IDs", asyn
 
     assert.equal(catalog.status, 200);
     assert.deepEqual(catalog.body.find((model: { id: string }) => model.id === "grok/grok-imagine-video"), { id: "grok/grok-imagine-video", platform: "grok", name: "grok-imagine-video", apiFormat: "xai", capability: "video" });
+    assert.deepEqual(catalog.body.find((model: { id: string }) => model.id === "openai/seedance-2.5"), { id: "openai/seedance-2.5", platform: "openai", name: "seedance-2.5", apiFormat: "ark", capability: "video" });
     assert.equal(authorization.status, 400);
 });
 

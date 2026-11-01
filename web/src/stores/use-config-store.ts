@@ -6,7 +6,7 @@ import { nanoid } from "nanoid";
 import i18n from "@/i18n";
 import type { Sub2ApiChannelDescriptor } from "@/lib/sub2api-channel-link";
 
-export type ApiCallFormat = "openai" | "gemini" | "xai";
+export type ApiCallFormat = "openai" | "gemini" | "xai" | "ark";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
 export type ManagedProviderId = "sub2api";
@@ -219,7 +219,9 @@ export function resolveModelScript(config: AiConfig, value: string) {
 }
 
 export function isAiConfigReady(config: AiConfig, model: string) {
-    const channel = findChannelModel(config, model)?.channel;
+    const selected = findChannelModel(config, model);
+    const channel = selected?.channel;
+    if ((selected?.model.apiFormat || channel?.apiFormat) === "ark" && (channel?.providerId !== "sub2api" || selected?.model.capability !== "video")) return false;
     return Boolean(model.trim() && channel?.baseUrl.trim() && (channel.authMode === "oidc" || channel.apiKey.trim()));
 }
 
@@ -548,7 +550,7 @@ export function defaultBaseUrlForApiFormat(apiFormat: ApiCallFormat) {
 }
 
 function normalizeApiFormat(apiFormat: unknown): ApiCallFormat {
-    return apiFormat === "gemini" || apiFormat === "xai" ? apiFormat : "openai";
+    return apiFormat === "gemini" || apiFormat === "xai" || apiFormat === "ark" ? apiFormat : "openai";
 }
 
 function uniqueModelOptions(models: string[]) {

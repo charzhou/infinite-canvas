@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearSub2ApiChannelLink, readSub2ApiChannelLink, resolveSub2ApiChannelModels } from "./sub2api-channel-link";
+import { clearSub2ApiChannelLink, createSub2ApiChannelModel, readSub2ApiChannelLink, resolveSub2ApiChannelModels } from "./sub2api-channel-link";
 
 const descriptor = { channelId: "tenant-a", name: "Tenant A", models: [{ name: "grok-imagine-video", capability: "video" as const, apiFormat: "xai" as const }], defaults: { video: "grok-imagine-video" } };
 const channel = btoa(JSON.stringify(descriptor)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -17,11 +17,26 @@ describe("Sub2API 渠道链接", () => {
     });
 
     it("applies known protocol defaults and an OpenAI fallback", () => {
-        expect(resolveSub2ApiChannelModels(["grok-imagine-video", "seedance-2.5", "custom-model"], { channelId: "tenant-a" })).toEqual([
+        expect(resolveSub2ApiChannelModels(["grok-imagine-video", "seedance-2.5", "doubao-seedance-2-0-pro", "custom-model"], { channelId: "tenant-a" })).toEqual([
             { name: "grok-imagine-video", capability: "video", apiFormat: "xai" },
-            { name: "seedance-2.5", capability: "video", apiFormat: "openai" },
+            { name: "seedance-2.5", capability: "video", apiFormat: "ark" },
+            { name: "doubao-seedance-2-0-pro", capability: "video", apiFormat: "ark" },
             { name: "custom-model", capability: "text", apiFormat: "openai" },
         ]);
+    });
+
+    it("keeps explicit protocol choices ahead of Seedance defaults", () => {
+        expect(createSub2ApiChannelModel("seedance-2.5", { apiFormat: "openai" }).apiFormat).toBe("openai");
+        expect(createSub2ApiChannelModel("custom-video", { capability: "video", apiFormat: "ark" }).apiFormat).toBe("ark");
+        expect(createSub2ApiChannelModel("seedance-text", { capability: "text" }).apiFormat).toBe("openai");
+    });
+
+    it("accepts Ark video metadata in links and rejects Ark for other capabilities", () => {
+        const encode = (model: object) => btoa(JSON.stringify({ channelId: "tenant-a", models: [model] })).replace(/=+$/, "");
+        expect(readSub2ApiChannelLink(`?apiKey=sk-test&channel=${encode({ name: "seedance-2.5", apiFormat: "ark" })}`).descriptor.models).toEqual([{ name: "seedance-2.5", apiFormat: "ark" }]);
+        for (const model of [{ name: "seedance-2.5", capability: "image", apiFormat: "ark" }, { name: "custom-text", apiFormat: "ark" }]) {
+            expect(() => readSub2ApiChannelLink(`?apiKey=sk-test&channel=${encode(model)}`)).toThrow("算力接入授权链接无效");
+        }
     });
 
     it.each(["?apiKey=&channel=x", "?apiKey=sk-test", "?apiKey=sk-test&channel=not-base64"])("rejects an invalid link: %s", (search) => {

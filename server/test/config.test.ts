@@ -25,10 +25,10 @@ test("loads deployment config and the static model catalog", () => {
             { name: "gpt-image-2", apiFormat: "openai", capability: "image" },
             { name: "gpt-image-2.5-sunburst", apiFormat: "openai", capability: "image" },
             { name: "gpt-image-2.5-flare", apiFormat: "openai", capability: "image" },
-            { name: "seedance-2.0", apiFormat: "openai", capability: "video" },
-            { name: "seedance-2.5", apiFormat: "openai", capability: "video" },
-            { name: "seedance-2.0-mini", apiFormat: "openai", capability: "video" },
-            { name: "seedance-2.0-fast", apiFormat: "openai", capability: "video" },
+            { name: "seedance-2.0", apiFormat: "ark", capability: "video" },
+            { name: "seedance-2.5", apiFormat: "ark", capability: "video" },
+            { name: "seedance-2.0-mini", apiFormat: "ark", capability: "video" },
+            { name: "seedance-2.0-fast", apiFormat: "ark", capability: "video" },
             { name: "minimax-h3", apiFormat: "openai", capability: "video" },
             { name: "gpt-5.6-terra", apiFormat: "openai", capability: "text" },
         ],
@@ -61,6 +61,7 @@ test("validates granted scopes against the static model catalog", () => {
         "openid offline_access llm:openai:*",
         "openid offline_access openid llm:openai:gpt-image-2",
         "openid offline_access llm:openai:gpt-4.1",
+        "openid offline_access llm:ark:seedance-2.5",
     ]) {
         assert.throws(() => parseScopes(scope));
     }
@@ -71,6 +72,7 @@ test("maps selected catalog IDs to exact requested scopes", () => {
 
     assert.deepEqual(scopes, ["openid", "offline_access", "llm:openai:gpt-image-2", "llm:openai:gpt-image-2.5-sunburst", "llm:openai:gpt-image-2.5-flare", "llm:openai:seedance-2.0", "llm:openai:seedance-2.5", "llm:openai:minimax-h3", "llm:grok:grok-imagine-video"]);
     assert.deepEqual(scopeModels(scopes).map((model) => model.name), ["grok-imagine-video", "gpt-image-2", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "seedance-2.0", "seedance-2.5", "minimax-h3"]);
+    assert.deepEqual(scopeModels(scopes).filter((model) => model.name.startsWith("seedance-")).map(({ platform, apiFormat }) => ({ platform, apiFormat })), [{ platform: "openai", apiFormat: "ark" }, { platform: "openai", apiFormat: "ark" }]);
     assert.throws(() => scopesForModelIds(["unknown/model"]));
 });
 

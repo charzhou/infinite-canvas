@@ -51,6 +51,7 @@ export default {
             authorize: "授权连接",
         },
         sub2api: {
+            arkProtocol: "Ark（Seedance）",
             displayName: "算力接入",
             invalidLink: "算力接入授权链接无效",
             noModels: "算力接入未返回可用模型",
@@ -79,6 +80,12 @@ export default {
             connectionSwitchFailed: "切换算力接入连接失败，原连接保持不变。",
         },
         video: {
+            arkProviderRequired: "Ark 协议仅支持算力接入渠道的视频模型",
+            arkFramesReferencesUnsupported: "首尾帧模式不支持参考视频或音频，请切换全能参考模式",
+            arkReferenceLimit: "参考素材超过数量上限：首尾帧最多 2 张图，全能参考最多 9 张图、3 段视频和 3 段音频",
+            arkInvalidResponse: "Ark 视频接口返回了无效的任务响应",
+            arkPollingPaused: "任务查询已暂停，请联系管理员核查，不要重复创建视频",
+            arkTaskCreateUncertain: "视频创建结果未知，请保留请求记录并联系管理员核查，不要重复创建",
             xaiReferencesUnsupported: "xAI 视频接口暂不支持参考视频或参考音频，请移除这些参考资产",
             xaiNoTaskId: "xAI 视频接口没有返回任务 ID",
             xaiTaskCreateFailed: "xAI 视频任务创建失败",

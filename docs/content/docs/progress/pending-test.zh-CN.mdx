@@ -5,6 +5,10 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # 待测试
 
+- Ark 算力接入：首次读取或链接导入的 Seedance / doubao-seedance 视频模型默认 Ark；显式协议优先，已保存的沧元配置不自动改写。API Key 面板仅视频模型显示 Ark，重新拉取保留已选协议；OIDC Seedance 目录为 Ark，原授权 scope 不变。普通渠道和非视频模型不能使用 Ark。
+- Ark 生成与素材：在画布配置节点、视频节点和视频创作台分别验证文生、首尾帧和全能参考。图片、视频、音频本地素材上传 `/v1/files` 时携带 `X-Video-Protocol: ark`，创建请求使用 `content` 内对应角色和嵌套 `file_id`；HTTPS 素材使用 `url`。首尾帧超过两图、混入参考视频/音频或全能参考超量时应明确报错，不静默裁剪；切换模式不应丢失已有 Ark 图片参考。缓存应区分协议 family、凭据和素材，文件过期或 OIDC 重新连接后重新上传。
+- Ark 任务恢复：所有创建仅调用 `/api/v3/contents/generations/tasks`，保存真实 `video_<uuid>`、模型和 Ark 协议；切换模型/协议、刷新后仍查询原任务。排队/运行继续等待，失败/过期停止；创建超时或断连不自动重发。查询临时错误退避，`video_polling_paused` 应持久暂停，刷新不自动继续；画布及创作台历史记录应保留手动查询入口，恢复查询后再次刷新仍可继续原任务。
+- Ark 成品与 OIDC：成功后下载 `content.video_url` 为本地素材，不附带网关 Key，不调用 `/content`；签名过期可重新查询下载，失败不得重建视频。OIDC 代理只开放 Ark 创建/单任务查询并在 Files 上传时透传协议头；不开放列表、删除。原生/桥接真实生成、生产 writer 与 Files 开启状态仍需部署后验证；本轮仅运行模拟接口测试。
 - 模型切换与重试：视频创作台设置 30 秒后从 Seedance 切换到 Grok，面板、底部摘要及实际请求都应为 15 秒；文本、视频、音频结果节点重试应优先使用该节点保存的模型和设置，不受上游配置节点后来切换模型影响。
 - 在途视频模型：新建视频任务后切换节点模型或全局默认模型，再刷新或查询任务，仍应使用提交任务时保存的模型和渠道；删除该模型或渠道后，画布及视频创作台应提示配置不可用且不向其他渠道查询。新增的 `videoTaskModel` 只随新任务保存；旧任务缺少该字段时阻止恢复，不猜测渠道或迁移旧数据。
 - 视频模型设置：全局默认视频模型为 Grok 时，在画布生成配置节点和视频节点提示词面板选择 Seedance 2.5，设置弹窗和摘要应显示「首尾帧模式 / 全能参考模式」且时长上限为 30 秒；反向将全局默认设为 Seedance、节点选择 Grok，应显示「首帧 / 多图参考」且上限为 15 秒。切换模型及刷新后应保持一致，视频创作台也应按自身选择的模型显示对应设置。
@@ -138,8 +142,8 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 ## OIDC 算力渠道
 
-- 算力接入视频渠道：未配置调用脚本时，`providerId: "sub2api"` 渠道的所有非 xAI 视频模型都应以沧元 JSON 字段调用 `/v1/videos`，包括 `duration`、`aspect_ratio`、`resolution`、`generate_audio`、首尾帧字段或多图参考字段，以及参考视频和音频；本地素材先上传到 `/v1/files` 后以 `{file_id}` 对象发送，公网 HTTPS 地址继续按字符串发送。在画布和视频创作台分别选择原 Seedance/`minimax-h3` 名单之外的视频模型，确认 OIDC 与 API Key 接入均不受模型名限制。普通渠道即使模型名或 Base URL 相同也应保持原协议；调用脚本仍优先执行，xAI 协议模型继续调用 `/v1/videos/generations` 并使用 `image` 或 `reference_images`。创建成功后只保存网关 `id`，完成结果依次读取 `video.url`、`data[0].url` 和 `/content`。刷新后，画布未完成任务应按保存的 provider 和 adapter 继续查询；轮询从 5 秒开始退避，单次最多 30 秒，总计最多等待 60 分钟。
-- OIDC 授权模型目录：在未连接状态选择 `seedance-2.0-fast`、`seedance-2.5` 或 `minimax-h3` 后完成授权，确认 Provider OAuth Client 的 `allowed_llm_scopes` 包含对应模型 scope，且已连接渠道可将其作为 OpenAI 格式视频模型使用。
+- 算力接入视频渠道：未配置调用脚本时，`providerId: "sub2api"` 渠道未选择 Ark 的非 xAI 视频模型应以沧元 JSON 字段调用 `/v1/videos`，包括 `duration`、`aspect_ratio`、`resolution`、`generate_audio`、首尾帧字段或多图参考字段，以及参考视频和音频；本地素材先上传到 `/v1/files` 后以 `{file_id}` 对象发送，公网 HTTPS 地址继续按字符串发送。在画布和视频创作台分别选择原 Seedance/`minimax-h3` 名单之外的视频模型，确认 OIDC 与 API Key 接入均不受模型名限制。此处 Seedance 应显式选择 OpenAI/沧元协议进行验证。普通渠道即使模型名或 Base URL 相同也应保持原协议；调用脚本仍优先执行，xAI 协议模型继续调用 `/v1/videos/generations` 并使用 `image` 或 `reference_images`。创建成功后只保存网关 `id`，完成结果依次读取 `video.url`、`data[0].url` 和 `/content`。刷新后，画布未完成任务应按保存的 provider 和 adapter 继续查询；轮询从 5 秒开始退避，单次最多 30 秒，总计最多等待 60 分钟。
+- OIDC 授权模型目录：在未连接状态选择 `seedance-2.0-fast`、`seedance-2.5` 或 `minimax-h3` 后完成授权，确认 Provider OAuth Client 的 `allowed_llm_scopes` 包含对应模型 scope；已连接渠道的 Seedance 模型使用 Ark，`minimax-h3` 使用 OpenAI/沧元协议。
 - 使用账户授权和仅 API Key 批准两种 Provider 路径完成浏览器授权。
 - 分别使用 `gpt-5.6-terra` 文本、`gpt-image-2` 与两个 Grok 生图别名、两个 Grok 视频别名、`seedance-2.0`、`seedance-2.0-mini`、`seedance-2.5` 和 `minimax-h3` 生成内容。
 - 在画布中选择受管理的 Grok 视频模型生成视频时，不应要求填写浏览器 API Key。

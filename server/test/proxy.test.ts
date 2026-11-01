@@ -8,7 +8,7 @@ import { loadOidcConfig } from "../src/config.js";
 import { createApp } from "../src/app.js";
 import { OidcTokenError } from "../src/oidc.js";
 
-const scopes = ["openid", "offline_access", "llm:grok:grok-imagine-image", "llm:grok:grok-imagine-image-quality", "llm:grok:grok-imagine-video", "llm:grok:grok-imagine-video-1.5", "llm:openai:gpt-image-2", "llm:openai:gpt-5.6-terra"];
+const scopes = ["openid", "offline_access", "llm:grok:grok-imagine-image", "llm:grok:grok-imagine-image-quality", "llm:grok:grok-imagine-video", "llm:grok:grok-imagine-video-1.5", "llm:openai:gpt-image-2", "llm:openai:gpt-5.6-terra", "llm:openai:seedance-2.5"];
 
 const config = loadOidcConfig({
     OIDC_ISSUER: "https://issuer.example",
@@ -226,6 +226,8 @@ test("proxy allows every route used by the approved OIDC models", async () => {
         { method: "POST", path: "/v1/files" },
         { method: "GET", path: "/v1/videos/video-request" },
         { method: "GET", path: "/v1/videos/video-request/content" },
+        { method: "POST", path: "/api/v3/contents/generations/tasks" },
+        { method: "GET", path: "/api/v3/contents/generations/tasks/video_11111111-1111-4111-8111-111111111111" },
     ] as const;
 
     for (const call of calls) {
@@ -246,6 +248,60 @@ test("proxy rejects management and absolute targets", async () => {
     assert.equal((await request(app).get("/api/oidc/proxy/https://attacker.example").set("Cookie", cookie)).status, 404);
 });
 
+test("proxy forwards the Ark file family only for file uploads", async () => {
+    const requests: Array<{ path: string; headers: Headers; body: string }> = [];
+    const app = createApp(config, { proxy: { fetch: async (url, init) => {
+        let body = "";
+        for await (const chunk of init?.body as unknown as AsyncIterable<Buffer>) body += chunk.toString();
+        requests.push({ path: new URL(url).pathname, headers: new Headers(init?.headers), body });
+        return Response.json({ id: "file-test" });
+    } } });
+    const upload = await request(app).post("/api/oidc/proxy/v1/files")
+        .set("Origin", "https://canvas.example").set("Cookie", authenticatedCookie())
+        .set("X-Video-Protocol", "ark").set("Authorization", "Bearer browser-key")
+        .field("purpose", "user_data").attach("file", Buffer.from("image-data"), "first.png");
+    assert.equal(upload.status, 200);
+    assert.equal(requests[0].headers.get("x-video-protocol"), "ark");
+    assert.equal(requests[0].headers.get("authorization"), "Bearer derived-token");
+    assert.match(requests[0].headers.get("content-type") || "", /^multipart\/form-data; boundary=/);
+    assert.match(requests[0].body, /image-data/);
+
+    const create = await request(app).post("/api/oidc/proxy/api/v3/contents/generations/tasks")
+        .set("Origin", "https://canvas.example").set("Cookie", authenticatedCookie())
+        .set("X-Video-Protocol", "ark").send({ model: "seedance-2.5", content: [{ type: "text", text: "test" }] });
+    assert.equal(create.status, 200);
+    assert.equal(requests[1].headers.get("x-video-protocol"), null);
+    assert.equal(JSON.parse(requests[1].body).model, "seedance-2.5");
+});
+
+test("proxy rejects Ark list, delete, content, traversal and cross-origin writes", async () => {
+    let upstreamCalls = 0;
+    const app = createApp(config, { proxy: { fetch: async () => { upstreamCalls++; return Response.json({}); } } });
+    const path = "/api/oidc/proxy/api/v3/contents/generations/tasks";
+    const cookie = authenticatedCookie();
+    for (const target of [path, `${path}/video_test/content`, `${path}/%2e%2e%2fv1%2fmodels`, `${path}/video%2ftest`]) {
+        assert.equal((await request(app).get(target).set("Cookie", cookie)).status, 404);
+    }
+    assert.equal((await request(app).delete(`${path}/video_test`).set("Origin", "https://canvas.example").set("Cookie", cookie)).status, 404);
+    assert.equal((await request(app).post(path).set("Origin", "https://attacker.example").set("Cookie", cookie).send({})).status, 404);
+    assert.equal((await request(app).get(`${path}/video_test`)).status, 401);
+    assert.equal(upstreamCalls, 0);
+});
+
+test("proxy preserves Ark polling-paused errors without retrying", async () => {
+    let attempts = 0;
+    const payload = { error: { code: "video_polling_paused", message: "Contact administrator" } };
+    const app = createApp(config, { proxy: { fetch: async () => {
+        attempts++;
+        return Response.json(payload, { status: 503, headers: { "Retry-After": "10" } });
+    } } });
+    const response = await request(app).get("/api/oidc/proxy/api/v3/contents/generations/tasks/video_test").set("Cookie", authenticatedCookie());
+    assert.equal(response.status, 503);
+    assert.deepEqual(response.body, payload);
+    assert.equal(response.headers["retry-after"], "10");
+    assert.equal(attempts, 1);
+});
+
 test("proxy clears a session only for an OAuth invalid-token response", async () => {
     const app = createApp(config, {
         proxy: {
@@ -260,7 +316,7 @@ test("proxy clears a session only for an OAuth invalid-token response", async ()
     assert.match(response.headers["set-cookie"].join(";"), /oidc_session=;/);
 });
 
-test("proxy retries a reset video status request once", async () => {
+for (const path of ["/v1/videos/video-request", "/api/v3/contents/generations/tasks/video_test"]) test(`proxy retries a reset video status request once: ${path}`, async () => {
     let attempts = 0;
     const app = createApp(config, {
         proxy: {
@@ -272,13 +328,13 @@ test("proxy retries a reset video status request once", async () => {
         },
     });
 
-    const response = await request(app).get("/api/oidc/proxy/v1/videos/video-request").set("Cookie", authenticatedCookie());
+    const response = await request(app).get(`/api/oidc/proxy${path}`).set("Cookie", authenticatedCookie());
 
     assert.equal(response.status, 200);
     assert.equal(attempts, 2);
 });
 
-test("proxy does not retry a reset video generation request", async () => {
+for (const path of ["/v1/videos/generations", "/api/v3/contents/generations/tasks"]) test(`proxy does not retry a reset video generation request: ${path}`, async () => {
     let attempts = 0;
     const app = createApp(config, {
         proxy: {
@@ -290,7 +346,7 @@ test("proxy does not retry a reset video generation request", async () => {
     });
 
     const response = await request(app)
-        .post("/api/oidc/proxy/v1/videos/generations")
+        .post(`/api/oidc/proxy${path}`)
         .set("Origin", "https://canvas.example")
         .set("Cookie", authenticatedCookie())
         .send({ model: "grok-imagine-video", prompt: "test" });

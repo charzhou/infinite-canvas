@@ -1,25 +1,19 @@
 import axios from "axios";
 
 import i18n from "@/i18n";
-import { dataUrlToFile } from "@/lib/image-utils";
 import { inferVideoRatio } from "@/lib/media-size";
-import { getMediaBlob } from "@/services/file-storage";
-import { getImageBlob, imageToDataUrl } from "@/services/image-storage";
+import { imageToDataUrl } from "@/services/image-storage";
 import { boolConfig, buildApiUrl, modelOptionName, type ModelRequestConfig } from "@/stores/use-config-store";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 import type { VideoGenerationTask, VideoGenerationTaskState } from "./video";
+import { createSub2ApiArkVideoTask, pollSub2ApiArkVideoTask } from "./sub2api-ark-video";
+import { isVideoBlob, uploadImageReference, uploadMediaReferences } from "./sub2api-media";
 
 type RequestOptions = { signal?: AbortSignal; videos?: ReferenceVideo[]; audios?: ReferenceAudio[] };
 type OpenAIVideoTask = { id?: string; status?: string; video?: { url?: string } | null; data?: Array<{ url?: string }> | { url?: string } | null; error?: { message?: string } | string | null };
 type XaiVideoTask = { request_id?: string; status?: "pending" | "done" | "failed" | "expired"; video?: { url?: string } | null; error?: { message?: string } | string | null };
 type ApiVideoResponse = OpenAIVideoTask | { code?: number | string; data?: OpenAIVideoTask | null; msg?: string; message?: string; error?: { message?: string } };
-type GatewayFileResponse = { id?: string; data?: { id?: string } | null; error?: { message?: string } | string; message?: string };
-type CangyuanMediaReference = string | { file_id: string };
-const CANGYUAN_FILE_UPLOAD_MAX_ATTEMPTS = 3;
-const CANGYUAN_FILE_UPLOAD_RETRY_DELAY_MS = 500;
-const gatewayFileCache = new Map<string, string>();
-const gatewayFileUploads = new Map<string, Promise<string>>();
 const apiText = (key: string) => i18n.t(`apiErrors.${key}`);
 const forkVideoText = (key: string) => i18n.t(`fork.video.${key}`);
 
@@ -28,12 +22,14 @@ export function cangyuanImageReferenceLimit(mode: string | undefined) {
 }
 
 export async function createSub2ApiVideoTask(config: ModelRequestConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
+    if (config.apiFormat === "ark") return createSub2ApiArkVideoTask(config, model, prompt, references, options);
     return config.apiFormat === "xai"
         ? createSub2ApiXaiVideoTask(config, model, prompt, references, options)
         : createSub2ApiCangyuanVideoTask(config, model, prompt, references, options);
 }
 
 export async function pollSub2ApiVideoTask(config: ModelRequestConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
+    if (task.provider === "ark") return pollSub2ApiArkVideoTask(config, task, options);
     return task.provider === "xai"
         ? pollSub2ApiXaiVideoTask(config, task, options)
         : pollSub2ApiOpenAIVideoTask(config, task, options);
@@ -130,101 +126,12 @@ async function downloadVideoBlob(config: ModelRequestConfig, task: VideoGenerati
     return response.data;
 }
 
-async function isVideoBlob(value: unknown): Promise<boolean> {
-    if (!(value instanceof Blob) || value.size === 0) return false;
-    const mimeType = value.type.split(";", 1)[0].trim().toLowerCase();
-    if (mimeType.startsWith("video/")) return true;
-    if (mimeType && mimeType !== "application/octet-stream") return false;
-    const bytes = new Uint8Array(await value.slice(0, 12).arrayBuffer());
-    return (bytes.length >= 8 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70)
-        || (bytes.length >= 4 && bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3);
-}
-
 function apiUrl(config: ModelRequestConfig, path: string) {
     return buildApiUrl(config.baseUrl, path);
 }
 
 function requestOptions(config: ModelRequestConfig, contentType: string | undefined, options?: RequestOptions) {
     return { headers: { Authorization: `Bearer ${config.apiKey}`, ...(contentType ? { "Content-Type": contentType } : {}) }, signal: options?.signal };
-}
-
-async function uploadImageReference(config: ModelRequestConfig, image: ReferenceImage, options?: RequestOptions): Promise<CangyuanMediaReference> {
-    if (isHttpsUrl(image.url)) return image.url;
-    const blob = image.storageKey ? await getImageBlob(image.storageKey) : image.dataUrl?.startsWith("data:") ? dataUrlToFile(image) : undefined;
-    if (!blob) throw new Error(apiText("referenceImageReadFailed"));
-    return { file_id: await uploadGatewayFile(config, blob, image.name || "reference-image", options, image.storageKey) };
-}
-
-async function uploadMediaReferences(config: ModelRequestConfig, items: Array<{ url?: string; storageKey?: string; name?: string }> | undefined, options?: RequestOptions): Promise<CangyuanMediaReference[]> {
-    return Promise.all((items || []).map(async (item) => {
-        if (isHttpsUrl(item.url)) return item.url;
-        if (!item.storageKey) throw new Error(apiText("localAssetReadFailed"));
-        const blob = await getMediaBlob(item.storageKey);
-        if (!blob) throw new Error(apiText("localAssetReadFailed"));
-        return { file_id: await uploadGatewayFile(config, blob, item.name || "reference-media", options, item.storageKey) };
-    }));
-}
-
-async function uploadGatewayFile(config: ModelRequestConfig, blob: Blob, filename: string, options?: RequestOptions, storageKey?: string) {
-    const cacheKey = storageKey ? gatewayFileCacheKey(config, storageKey) : undefined;
-    if (cacheKey) {
-        const cached = gatewayFileCache.get(cacheKey);
-        if (cached) return cached;
-        const pending = gatewayFileUploads.get(cacheKey);
-        if (pending) return pending;
-    }
-    const upload = uploadGatewayFileWithRetry(config, blob, filename, options);
-    if (cacheKey) gatewayFileUploads.set(cacheKey, upload);
-    try {
-        const fileId = await upload;
-        if (cacheKey) gatewayFileCache.set(cacheKey, fileId);
-        return fileId;
-    } finally {
-        if (cacheKey && gatewayFileUploads.get(cacheKey) === upload) gatewayFileUploads.delete(cacheKey);
-    }
-}
-
-async function uploadGatewayFileWithRetry(config: ModelRequestConfig, blob: Blob, filename: string, options?: RequestOptions) {
-    const form = new FormData();
-    form.append("purpose", "user_data");
-    form.append("file", blob, filename);
-    for (let attempt = 0; attempt < CANGYUAN_FILE_UPLOAD_MAX_ATTEMPTS; attempt += 1) {
-        if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-        try {
-            const response = await axios.post<GatewayFileResponse>(apiUrl(config, "/files"), form, requestOptions(config, undefined, options));
-            const fileId = response.data.id || response.data.data?.id;
-            if (!fileId) throw new Error(readError(response.data) || apiText("videoTaskCreateFailed"));
-            return fileId;
-        } catch (error) {
-            if (!isRetryableFileUploadError(error) || attempt === CANGYUAN_FILE_UPLOAD_MAX_ATTEMPTS - 1) throw error;
-            await delay(CANGYUAN_FILE_UPLOAD_RETRY_DELAY_MS * 2 ** attempt, options?.signal);
-        }
-    }
-    throw new Error(apiText("videoTaskCreateFailed"));
-}
-
-function gatewayFileCacheKey(config: ModelRequestConfig, storageKey: string) {
-    return [config.providerId || "", config.authMode || "", config.apiFormat, config.baseUrl, config.apiKey, storageKey].join("\u0000");
-}
-
-function isRetryableFileUploadError(error: unknown) {
-    if (axios.isCancel(error) || !axios.isAxiosError<{ response?: { status?: number } }>(error)) return false;
-    const status = error.response?.status;
-    return !status || status === 408 || status === 429 || status >= 500;
-}
-
-function delay(ms: number, signal?: AbortSignal) {
-    return new Promise<void>((resolve, reject) => {
-        if (signal?.aborted) {
-            reject(new DOMException("Aborted", "AbortError"));
-            return;
-        }
-        const timer = setTimeout(resolve, ms);
-        signal?.addEventListener("abort", () => {
-            clearTimeout(timer);
-            reject(new DOMException("Aborted", "AbortError"));
-        }, { once: true });
-    });
 }
 
 function normalizeCangyuanSeconds(value: string) {
@@ -268,10 +175,6 @@ function unwrapVideoResponse(payload: ApiVideoResponse): OpenAIVideoTask {
         return payload.data;
     }
     return payload;
-}
-
-function isHttpsUrl(value: string | undefined): value is string {
-    return typeof value === "string" && /^https:\/\//i.test(value);
 }
 
 function readError(value: unknown): string {

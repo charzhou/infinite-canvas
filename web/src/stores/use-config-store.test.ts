@@ -106,6 +106,22 @@ it("keeps the declared xAI format and Sub2API adapter after import", () => {
     expect(resolveModelRequestConfig(result, "sub2api::grok-imagine-video")).toMatchObject({ apiFormat: "xai", providerId: "sub2api" });
 });
 
+it("preserves Ark video selection through import and config normalization", () => {
+    const imported = importSub2ApiChannel(defaultConfig, { apiKey: "sk-test", descriptor: { channelId: "tenant-a", defaults: { video: "seedance-2.5" } }, models: [{ name: "seedance-2.5", capability: "video", apiFormat: "ark" }] });
+    const result = normalizeAiConfig(JSON.parse(JSON.stringify(imported)));
+    expect(result.videoModel).toBe("sub2api::seedance-2.5");
+    expect(resolveModelRequestConfig(result, result.videoModel)).toMatchObject({ apiFormat: "ark", providerId: "sub2api" });
+    expect(isAiConfigReady(result, result.videoModel)).toBe(true);
+});
+
+it("blocks Ark outside managed video models without silently changing its protocol", () => {
+    const config: AiConfig = { ...defaultConfig, channels: [{ ...sub2ApiChannel, authMode: "manual", apiKey: "sk-test", models: [{ name: "seedance-2.5", capability: "video", apiFormat: "ark" }] }] };
+    const value = "sub2api::seedance-2.5";
+    expect(isAiConfigReady({ ...config, channels: [{ ...config.channels[0], providerId: undefined }] }, value)).toBe(false);
+    expect(isAiConfigReady({ ...config, channels: [{ ...config.channels[0], models: [{ name: "seedance-2.5", capability: "image", apiFormat: "ark" }] }] }, value)).toBe(false);
+    expect(resolveModelRequestConfig(config, value).apiFormat).toBe("ark");
+});
+
 it("rejects a descriptor default that does not match the imported model capability", () => {
     expect(() =>
         importSub2ApiChannel(defaultConfig, {

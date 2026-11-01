@@ -22,7 +22,7 @@ const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiE
 const forkVideoText = (key: string) => i18n.t(`fork.video.${key}`);
 
 export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
-export type VideoGenerationTask = { id: string; provider: "openai" | "gemini" | "xai" | "plugin"; model: string; adapter?: "sub2api" };
+export type VideoGenerationTask = { id: string; provider: "openai" | "gemini" | "xai" | "ark" | "plugin"; model: string; adapter?: "sub2api" };
 type GeminiInlineData = { bytesBase64Encoded: string; mimeType: string };
 type GeminiVideoOperation = {
     name?: string;
@@ -64,10 +64,16 @@ export async function waitForVideoGenerationTask(config: AiConfig, task: VideoGe
     const deadline = Date.now() + videoPollTimeoutMs();
     for (let attempt = 0; ; attempt += 1) {
         if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-        const state = await pollVideoGenerationTask(config, task, options);
-        if (state.status === "completed") return state.result;
-        if (state.status === "failed") throw videoTaskFailed(state.error);
-        const waitMs = videoPollDelay(attempt);
+        let waitMs = videoPollDelay(attempt);
+        try {
+            const state = await pollVideoGenerationTask(config, task, options);
+            if (state.status === "completed") return state.result;
+            if (state.status === "failed") throw videoTaskFailed(state.error);
+        } catch (error) {
+            if (!(error instanceof Error) || error.name !== "VideoPollingRetryable") throw error;
+            const retryAfterMs = (error as Error & { retryAfterMs?: number }).retryAfterMs;
+            if (retryAfterMs) waitMs = Math.max(waitMs, Math.min(30_000, retryAfterMs));
+        }
         if (Date.now() + waitMs >= deadline) throw new Error(apiText("videoTimeout", { provider: "" }));
         await delay(waitMs, options?.signal);
     }
@@ -75,6 +81,10 @@ export async function waitForVideoGenerationTask(config: AiConfig, task: VideoGe
 
 export function isVideoTaskFailed(error: unknown) {
     return error instanceof Error && error.name === "VideoTaskFailed";
+}
+
+export function isVideoPollingPaused(error: unknown) {
+    return error instanceof Error && error.name === "VideoPollingPaused";
 }
 
 function videoTaskFailed(message: string) {
@@ -88,6 +98,7 @@ export async function createVideoGenerationTask(config: AiConfig, prompt: string
     const requestConfig = resolveModelRequestConfig(config, selectedModel);
     const script = resolveModelScript(config, selectedModel);
     if (script) return createPluginVideoTask(requestConfig, selectedModel, script, prompt, references, options);
+    if (requestConfig.apiFormat === "ark" && (!isAiConfigReady(config, selectedModel) || requestConfig.providerId !== "sub2api")) throw new Error(forkVideoText("arkProviderRequired"));
     assertVideoConfig(requestConfig, requestConfig.model);
     if (requestConfig.providerId === "sub2api") return createSub2ApiVideoTask(requestConfig, selectedModel, prompt, references, options);
     if (requestConfig.apiFormat === "xai") return createXaiVideoTask(requestConfig, selectedModel, prompt, references, options);
@@ -104,6 +115,7 @@ export async function pollVideoGenerationTask(config: AiConfig, task: VideoGener
     const requestConfig = resolveModelRequestConfig(config, task.model);
     assertVideoConfig(requestConfig, requestConfig.model);
     if (task.adapter === "sub2api") return pollSub2ApiVideoTask(requestConfig, task, options);
+    if (task.provider === "ark") throw new Error(forkVideoText("arkProviderRequired"));
     if (task.provider === "xai") return pollXaiVideoTask(requestConfig, task, options);
     if (task.provider === "gemini") return pollGeminiVideoTask(requestConfig, task, options);
     return pollOpenAIVideoTask(requestConfig, task, options);

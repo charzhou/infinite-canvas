@@ -13,6 +13,8 @@ const allowedRoutes = [
     ["GET", /^\/v1\/models$/],
     ["POST", /^\/v1\/(chat\/completions|responses|images\/(generations|edits)|videos(?:\/generations)?|audio\/speech|files)$/],
     ["GET", /^\/v1\/videos\/[^/]+(?:\/content)?$/],
+    ["POST", /^\/api\/v3\/contents\/generations\/tasks$/],
+    ["GET", /^\/api\/v3\/contents\/generations\/tasks\/[A-Za-z0-9_-]+$/],
     ["GET", /^\/(v1beta|antigravity\/v1beta)\/models(?:\/[^/]+)?$/],
     ["POST", /^\/(v1beta|antigravity\/v1beta)\/models\/[^/:]+:(generateContent|streamGenerateContent|predictLongRunning)$/],
     ["GET", /^\/(v1beta|antigravity\/v1beta)\/[^/]+$/],
@@ -57,11 +59,15 @@ function sameOriginWrite(request: Request, config: OidcConfig) {
     return request.get("origin") === config.publicOrigin.origin;
 }
 
-function copiedRequestHeaders(request: Request, accessToken: string) {
+function copiedRequestHeaders(request: Request, accessToken: string, target: string) {
     const headers = new Headers();
     for (const name of requestHeaders) {
         const value = request.get(name);
         if (value) headers.set(name, value);
+    }
+    if (request.method === "POST" && target.split("?", 1)[0] === "/v1/files") {
+        const protocol = request.get("x-video-protocol");
+        if (protocol) headers.set("X-Video-Protocol", protocol);
     }
     headers.set("Authorization", `Bearer ${accessToken}`);
     return headers;
@@ -89,7 +95,7 @@ function proxyErrorCode(error: unknown) {
 }
 
 function retryableVideoStatusRequest(request: Request, target: string, error: unknown) {
-    return request.method === "GET" && /^\/v1\/videos\/[^/]+$/.test(target.split("?", 1)[0]) && proxyErrorCode(error) === "ECONNRESET";
+    return request.method === "GET" && /^\/(v1\/videos|api\/v3\/contents\/generations\/tasks)\/[A-Za-z0-9_-]+$/.test(target.split("?", 1)[0]) && proxyErrorCode(error) === "ECONNRESET";
 }
 
 export async function proxyGatewayRequest(config: OidcConfig, request: Request, response: Response, session: OidcSessionPayload, dependencies: ProxyDependencies = {}) {
@@ -101,7 +107,7 @@ export async function proxyGatewayRequest(config: OidcConfig, request: Request, 
         const hasBody = !["GET", "HEAD"].includes(method);
         const init = {
             method,
-            headers: copiedRequestHeaders(request, session.accessToken),
+            headers: copiedRequestHeaders(request, session.accessToken, target),
             body: hasBody ? (request as unknown as ReadableStream) : undefined,
             duplex: "half",
             signal: AbortSignal.timeout(config.proxyTimeoutMs),

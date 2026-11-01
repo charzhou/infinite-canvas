@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 
 import { requestEdit, requestGeneration, requestImageQuestion } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
-import { createVideoGenerationTask, isVideoTaskFailed, storeGeneratedVideo, waitForVideoGenerationTask } from "@/services/api/video";
+import { createVideoGenerationTask, isVideoPollingPaused, isVideoTaskFailed, storeGeneratedVideo, waitForVideoGenerationTask } from "@/services/api/video";
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { ensureImagePreview, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
@@ -325,7 +325,7 @@ function InfiniteCanvasPage() {
         async (nodeId: string, config: Parameters<typeof buildGenerationConfig>[0], prompt: string, images: Parameters<typeof createVideoGenerationTask>[2], signal: AbortSignal, extra: CanvasNodeData["metadata"] = {}, videos: ReferenceVideo[] = [], audios: ReferenceAudio[] = []) => {
             const task = await createVideoGenerationTask(config, prompt, images, { signal, videos, audios });
             if (task.provider !== "plugin") {
-                setNodes((prev) => prev.map((item) => (item.id === nodeId ? { ...item, metadata: { ...item.metadata, videoTaskId: task.id, videoTaskModel: task.model, videoTaskProvider: task.provider, videoTaskAdapter: task.adapter, model: config.model } } : item)));
+                setNodes((prev) => prev.map((item) => (item.id === nodeId ? { ...item, metadata: { ...item.metadata, videoTaskId: task.id, videoPollingPaused: false, videoTaskModel: task.model, videoTaskProvider: task.provider, videoTaskAdapter: task.adapter, model: config.model } } : item)));
             }
             const video = await storeGeneratedVideo(await waitForVideoGenerationTask(config, task, { signal }));
             setNodes((prev) => prev.map((item) => (item.id === nodeId ? applyGeneratedVideo(item, video, { prompt, model: config.model, ...extra }) : item)));
@@ -336,7 +336,7 @@ function InfiniteCanvasPage() {
     const pollVideoNodeTask = useCallback(
         async (node: CanvasNodeData, silent = false) => {
             const taskId = node.metadata?.videoTaskId;
-            if (!taskId || node.metadata?.content || generationRequestsRef.current.has(node.id) || videoPollIdsRef.current.has(node.id)) return;
+            if (!taskId || (silent && node.metadata?.videoPollingPaused) || node.metadata?.content || generationRequestsRef.current.has(node.id) || videoPollIdsRef.current.has(node.id)) return;
             videoPollIdsRef.current.add(node.id);
             let controller: AbortController | undefined;
             try {
@@ -350,7 +350,7 @@ function InfiniteCanvasPage() {
                     return;
                 }
                 setRunningNodeId(node.id);
-                setNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, metadata: { ...item.metadata, status: NODE_STATUS_LOADING, errorDetails: undefined } } : item)));
+                setNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, metadata: { ...item.metadata, status: NODE_STATUS_LOADING, errorDetails: undefined, videoPollingPaused: false } } : item)));
                 controller = startGenerationRequest(node.id, node.id, node.id);
                 const video = await storeGeneratedVideo(await waitForVideoGenerationTask(generationConfig, { id: taskId, provider: node.metadata?.videoTaskProvider || "openai", model: generationConfig.model, adapter: node.metadata?.videoTaskAdapter }, { signal: controller.signal }));
                 setNodes((prev) =>
@@ -358,6 +358,7 @@ function InfiniteCanvasPage() {
                         item.id === node.id
                             ? applyGeneratedVideo(item, video, {
                                   prompt: item.metadata?.prompt,
+                                  videoPollingPaused: false,
                                   model: generationConfig.model,
                                   size: generationConfig.size,
                                   seconds: generationConfig.videoSeconds,
@@ -382,6 +383,7 @@ function InfiniteCanvasPage() {
                                       ...item.metadata,
                                       status: item.metadata?.content ? NODE_STATUS_SUCCESS : NODE_STATUS_ERROR,
                                       errorDetails: item.metadata?.content ? undefined : errorDetails,
+                                      videoPollingPaused: isVideoPollingPaused(error),
                                       ...(isVideoTaskFailed(error) ? { videoTaskId: undefined, videoTaskModel: undefined, videoTaskProvider: undefined, videoTaskAdapter: undefined } : {}),
                                   },
                               }
@@ -2800,6 +2802,7 @@ function InfiniteCanvasPage() {
                                           ...node.metadata,
                                           status: NODE_STATUS_ERROR,
                                           errorDetails,
+                                          ...(node.type === CanvasNodeType.Video ? { videoPollingPaused: isVideoPollingPaused(error) } : {}),
                                           ...(isVideoTaskFailed(error) && node.type === CanvasNodeType.Video ? { videoTaskId: undefined, videoTaskModel: undefined, videoTaskProvider: undefined, videoTaskAdapter: undefined } : {}),
                                       },
                                   }
@@ -2957,6 +2960,7 @@ function InfiniteCanvasPage() {
                                       status: item.metadata?.content ? NODE_STATUS_SUCCESS : NODE_STATUS_ERROR,
                                       errorDetails: item.metadata?.content ? undefined : errorDetails,
                                       images: item.metadata?.images?.map((image) => (image.id === imageId ? { ...image, status: NODE_STATUS_ERROR, errorDetails } : image)),
+                                      ...(item.type === CanvasNodeType.Video ? { videoPollingPaused: isVideoPollingPaused(error) } : {}),
                                       ...(isVideoTaskFailed(error) && item.type === CanvasNodeType.Video ? { videoTaskId: undefined, videoTaskModel: undefined, videoTaskProvider: undefined, videoTaskAdapter: undefined } : {}),
                                   },
                               }

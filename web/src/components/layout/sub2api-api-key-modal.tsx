@@ -24,6 +24,7 @@ export function Sub2ApiApiKeyModal({ open, onClose }: { open: boolean; onClose: 
     const [verifying, setVerifying] = useState(false);
     const [saving, setSaving] = useState(false);
     const displayName = t("fork.sub2api.displayName");
+    const videoProtocolOptions = [...protocolOptions, { label: t("fork.sub2api.arkProtocol"), value: "ark" as const }];
 
     useEffect(() => {
         if (!open) return;
@@ -43,7 +44,11 @@ export function Sub2ApiApiKeyModal({ open, onClose }: { open: boolean; onClose: 
         setVerifying(true);
         try {
             const discovered = await fetchChannelModels({ id: SUB2API_CHANNEL_ID, name: displayName, baseUrl: SUB2API_GATEWAY_BASE_URL, apiKey: key, apiFormat: "openai", authMode: "manual", providerId: "sub2api", models: [] });
-            const resolved = resolveSub2ApiChannelModels(discovered, { channelId: SUB2API_CHANNEL_ID });
+            const savedModels = new Map((current?.models || []).map((model) => [model.name, model]));
+            const resolved = resolveSub2ApiChannelModels(discovered, { channelId: SUB2API_CHANNEL_ID }).map((model) => {
+                const saved = savedModels.get(model.name);
+                return { ...model, ...saved, apiFormat: saved?.apiFormat || model.apiFormat };
+            });
             setModels(resolved);
             setSelectedNames(new Set(resolved.map((model) => model.name)));
         } catch {
@@ -117,8 +122,8 @@ export function Sub2ApiApiKeyModal({ open, onClose }: { open: boolean; onClose: 
                                 <Checkbox checked={selectedNames.has(model.name)} onChange={(event) => toggleModel(model.name, event.target.checked)}>
                                     <span className="break-all text-sm">{model.name}</span>
                                 </Checkbox>
-                                <Select size="small" value={model.capability} options={capabilityOptions} onChange={(capability) => updateModel(model.name, { capability })} />
-                                <Select size="small" value={model.apiFormat || "openai"} options={protocolOptions} onChange={(apiFormat) => updateModel(model.name, { apiFormat })} />
+                                <Select size="small" value={model.capability} options={capabilityOptions} onChange={(capability) => updateModel(model.name, { capability, ...(capability !== "video" && model.apiFormat === "ark" ? { apiFormat: "openai" } : {}) })} />
+                                <Select size="small" value={model.apiFormat || "openai"} options={model.capability === "video" ? videoProtocolOptions : protocolOptions} onChange={(apiFormat) => updateModel(model.name, { apiFormat })} />
                             </div>
                         ))}
                     </div>

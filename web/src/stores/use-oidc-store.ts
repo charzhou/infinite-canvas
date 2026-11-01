@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import i18n from "@/i18n";
+import { clearSub2ApiMediaCache } from "@/services/api/sub2api-media";
 import { beginOidcAuthorization, disconnectOidc, getOidcConfig, getOidcModelCatalog, getOidcModels, getOidcSession, type OidcModel } from "@/services/api/oidc";
 import { removeOidcChannel, syncManagedOidcChannel, useConfigStore } from "@/stores/use-config-store";
 
@@ -33,6 +34,7 @@ export const useOidcStore = create<OidcState>((set, get) => ({
     loading: false,
     error: "",
     refresh: async () => {
+        clearSub2ApiMediaCache();
         set({ loading: true, error: "" });
         try {
             const publicConfig = await getOidcConfig();
@@ -66,6 +68,7 @@ export const useOidcStore = create<OidcState>((set, get) => ({
         }
     },
     connect: async (modelIds) => {
+        clearSub2ApiMediaCache();
         set({ loading: true, error: "" });
         try {
             await beginOidcAuthorization(modelIds, "/config");
@@ -90,6 +93,7 @@ export const useOidcStore = create<OidcState>((set, get) => ({
         }
     },
     disconnectSession: async () => {
+        clearSub2ApiMediaCache();
         set({ loading: true, error: "" });
         try {
             await disconnectOidc();
@@ -102,6 +106,7 @@ export const useOidcStore = create<OidcState>((set, get) => ({
         }
     },
     disconnect: async () => {
+        clearSub2ApiMediaCache();
         set({ loading: true, error: "" });
         try {
             await disconnectOidc();
@@ -115,6 +120,7 @@ export const useOidcStore = create<OidcState>((set, get) => ({
         }
     },
     invalidate: () => {
+        clearSub2ApiMediaCache();
         removeManagedChannel();
         set({ connected: false, modelIds: [], error: "" });
     },

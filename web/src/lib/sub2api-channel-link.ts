@@ -9,14 +9,16 @@ export type Sub2ApiChannelDescriptor = {
 };
 
 const capabilities = new Set<ModelCapability>(["image", "video", "text", "audio"]);
-const apiFormats = new Set<ApiCallFormat>(["openai", "gemini", "xai"]);
+const apiFormats = new Set<ApiCallFormat>(["openai", "gemini", "xai", "ark"]);
 const invalidLink = () => new Error(i18n.t("fork.sub2api.invalidLink"));
 
 export function createSub2ApiChannelModel(name: string, declared?: Partial<Pick<ChannelModel, "capability" | "apiFormat">>): ChannelModel {
+    const capability = declared?.capability || guessCapability(name);
+    if (declared?.apiFormat === "ark" && capability !== "video") throw invalidLink();
     return {
         name,
-        capability: declared?.capability || guessCapability(name),
-        apiFormat: declared?.apiFormat || (/^grok-imagine-/i.test(name) ? "xai" : "openai"),
+        capability,
+        apiFormat: declared?.apiFormat || (capability === "video" && /^(?:doubao-)?seedance-/i.test(name) ? "ark" : /^grok-imagine-/i.test(name) ? "xai" : "openai"),
     };
 }
 
@@ -81,6 +83,7 @@ function parseModels(value: unknown): Sub2ApiChannelDescriptor["models"] {
         names.add(name);
         if (model.capability !== undefined && (typeof model.capability !== "string" || !capabilities.has(model.capability as ModelCapability))) throw invalidLink();
         if (model.apiFormat !== undefined && (typeof model.apiFormat !== "string" || !apiFormats.has(model.apiFormat as ApiCallFormat))) throw invalidLink();
+        if (model.apiFormat === "ark" && (model.capability || guessCapability(name)) !== "video") throw invalidLink();
         return { name, ...(model.capability ? { capability: model.capability as ModelCapability } : {}), ...(model.apiFormat ? { apiFormat: model.apiFormat as ApiCallFormat } : {}) };
     });
 }
