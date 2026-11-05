@@ -1,3 +1,4 @@
+import { imageGenerationDefaults, type ImageGenerationSettings } from "@/lib/image-generation-settings";
 import { useMemo } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -29,7 +30,7 @@ export type ModelChannel = {
     models: ChannelModel[];
 };
 
-export type AiConfig = {
+export type AiConfig = ImageGenerationSettings & {
     channelMode: "remote" | "local";
     baseUrl: string;
     apiKey: string;
@@ -90,6 +91,7 @@ export const LOCAL_PROXY_PACKAGE = "@basketikun/canvas-proxy";
 export const DEFAULT_LOCAL_PROXY_URL = "http://127.0.0.1:23210";
 
 export const defaultConfig: AiConfig = {
+    ...imageGenerationDefaults,
     channelMode: "local",
     baseUrl: OPENAI_BASE_URL,
     apiKey: "",
@@ -103,6 +105,8 @@ export const defaultConfig: AiConfig = {
             apiFormat: "openai",
             models: [
                 { name: "gpt-image-2", capability: "image" },
+                { name: "gpt-image-2.6-sunburst", capability: "image" },
+                { name: "gpt-image-2.6-flare", capability: "image" },
                 { name: "grok-imagine-video", capability: "video" },
                 { name: "gpt-5.5", capability: "text" },
                 { name: "gpt-4o-mini-tts", capability: "audio" },
@@ -125,7 +129,7 @@ export const defaultConfig: AiConfig = {
     videoMode: "frames",
     systemPrompt: "",
     reasoningEffort: "auto",
-    models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
+    models: ["default::gpt-image-2", "default::gpt-image-2.6-sunburst", "default::gpt-image-2.6-flare", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
     quality: "auto",
     size: "1:1",
     background: "",

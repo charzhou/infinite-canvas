@@ -18,13 +18,15 @@ const scopes = [
     "llm:openai:gpt-image-2",
     "llm:openai:gpt-image-2.5-sunburst",
     "llm:openai:gpt-image-2.5-flare",
+    "llm:openai:gpt-image-2.6-sunburst",
+    "llm:openai:gpt-image-2.6-flare",
     "llm:openai:seedance-2.0",
     "llm:openai:seedance-2.5",
     "llm:openai:seedance-2.0-mini",
     "llm:openai:minimax-h3",
     "llm:openai:gpt-5.6-terra",
 ].join(" ");
-const modelIds = ["grok/grok-imagine-image", "grok/grok-imagine-image-quality", "grok/grok-imagine-video", "grok/grok-imagine-video-1.5", "openai/gpt-image-2", "openai/gpt-image-2.5-sunburst", "openai/gpt-image-2.5-flare", "openai/seedance-2.0", "openai/seedance-2.5", "openai/seedance-2.0-mini", "openai/minimax-h3", "openai/gpt-5.6-terra"];
+const modelIds = ["grok/grok-imagine-image", "grok/grok-imagine-image-quality", "grok/grok-imagine-video", "grok/grok-imagine-video-1.5", "openai/gpt-image-2", "openai/gpt-image-2.5-sunburst", "openai/gpt-image-2.5-flare", "openai/gpt-image-2.6-sunburst", "openai/gpt-image-2.6-flare", "openai/seedance-2.0", "openai/seedance-2.5", "openai/seedance-2.0-mini", "openai/minimax-h3", "openai/gpt-5.6-terra"];
 const refreshTokenExpiresAt = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
 
 const config = loadOidcConfig({
@@ -139,6 +141,8 @@ test("session endpoints return capability metadata but never the derived token",
     assert.equal(models.body.some((model: { name: string }) => model.name === "gpt-image-2"), true);
     assert.equal(models.body.some((model: { name: string }) => model.name === "gpt-image-2.5-sunburst"), true);
     assert.equal(models.body.some((model: { name: string }) => model.name === "gpt-image-2.5-flare"), true);
+    assert.equal(models.body.some((model: { name: string }) => model.name === "gpt-image-2.6-sunburst"), true);
+    assert.equal(models.body.some((model: { name: string }) => model.name === "gpt-image-2.6-flare"), true);
 });
 
 test("session endpoints reject a refresh family past its absolute expiry", async () => {

@@ -37,6 +37,17 @@ export type CanvasNodeMetadata = {
     model?: string;
     size?: string;
     quality?: string;
+    background?: string;
+    imageOutputFormat?: string;
+    imageComplexity?: string;
+    imageFrameCount?: string;
+    imageFrameDurationMs?: string;
+    imageOutputCompression?: string;
+    imageSvgModel?: string;
+    imageSvgReasoningEffort?: string;
+    imageRole?: "markup";
+    markupReference?: string;
+    markupTarget?: string;
     count?: number;
     seconds?: string;
     vquality?: string;
@@ -151,8 +162,16 @@ export type GenerateOptions = {
 };
 
 export type GenerateImageOptions = GenerateOptions & {
-    count?: number; // 期望生成张数(宿主会按模型上限裁剪)
-    size?: string; // 形如 "1024x1024" / "auto";缺省用宿主当前配置
+    count?: number;
+    size?: string;
+    quality?: string;
+    outputFormat?: "png" | "jpeg" | "webp" | "gif" | "svg";
+    complexity?: "auto" | "low" | "medium" | "high";
+    frameCount?: number; // GIF: 2–16
+    frameDurationMs?: number; // GIF: 20–2000 ms
+    outputCompression?: number; // JPEG/WebP: 0–100
+    svg?: { model: string; reasoningEffort?: "auto" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" };
+    markup?: string; // 独立透明 PNG dataURL;对应 references 中的第一张原图
 };
 
 export type GenerateImageResult = {

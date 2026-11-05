@@ -1,6 +1,7 @@
 import axios, { type AxiosRequestConfig } from "axios";
 
 import i18n from "@/i18n";
+import { imageMimeType } from "@/lib/image-generation-settings";
 import { buildApiUrl, withLocalProxy, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
 
 type RequestOptions = { signal?: AbortSignal };
@@ -229,97 +230,56 @@ export function getPluginTemplates(): Record<ModelCapability, PluginTemplate[]> 
         {
             label: i18n.t("modelPlugin.templates.openai"),
             script: `/**
- * OpenAI image generation and editing.
- * Text-to-image uses POST /v1/images/generations (JSON) when images is empty.
- * Image editing uses POST /v1/images/edits (multipart) when images has data URLs.
+ * OpenAI Images generation/editing, including GPT Image 2.6 GIF/SVG and markup.
  * @param {string} prompt
- * @param {string[]} images - reference images as data URLs; empty for text-to-image
- * @param {object} params
- * @param {string} params.size - output size, e.g. "1024x1024" or "auto"
- * @param {string} params.quality - "low" | "medium" | "high" | "xhigh" | "max"
- * @param {number} params.count - number of images
- * @param {string} [params.background] - "transparent" when requested
+ * @param {string[]} images - reference image data URLs
+ * @param {object} params - size, quality, count, background, output_format,
+ * complexity, frame_count, frame_duration_ms, output_compression, svg, markup
  * @param {string} model
  * @param {string} baseUrl
  * @param {string} apiKey
- * @param {function} request - raw HTTP helper; relative urls join baseUrl without /v1
+ * @param {function} request
  * @returns {Promise<string[]>} image URLs or data URLs
  */
 async function generateImage({
-  prompt,
-  images,
-  params: {
-    size,
-    quality,
-    count,
-    background,
-  },
-  model,
-  baseUrl,
-  apiKey,
-  request,
+  prompt, images,
+  params: { size, quality, count, background, output_format, complexity,
+    frame_count, frame_duration_ms, output_compression, svg, markup },
+  model, baseUrl, apiKey, request,
 }) {
-  if (images.length === 0) {
-    const data = await request({
-      method: "post",
-      url: \`\${baseUrl}/v1/images/generations\`,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: \`Bearer \${apiKey}\`,
-      },
-      data: {
-        model: model,
-        prompt: prompt,
-        n: count,
-        size: size,
-        quality: quality,
-        background: background,
-        response_format: "b64_json",
-      },
-    });
-    const urls = [];
-    for (const item of data.data || []) {
-      urls.push(item.b64_json ? \`data:image/png;base64,\${item.b64_json}\` : item.url);
+  const fields = Object.fromEntries(Object.entries({
+    model, prompt, n: count, size, quality, background, output_format,
+    complexity, frame_count, frame_duration_ms, output_compression, svg,
+    ...(/gpt-image/.test(model) ? {} : { response_format: "b64_json" }),
+  }).filter(([, value]) => value !== undefined));
+  let body = fields;
+  if (images.length) {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(fields)) {
+      form.set(key, typeof value === "object" ? JSON.stringify(value) : String(value));
     }
-    return urls;
+    const imageField = images.length > 1 ? "image[]" : "image";
+    for (const dataUrl of images) {
+      const file = await (await fetch(dataUrl)).blob();
+      if (/gpt-image/.test(model) && file.type === "image/svg+xml") throw new Error("Convert SVG references to PNG before editing.");
+      form.append(imageField, file, "reference." + (file.type.split("/")[1]?.split("+")[0] || "png"));
+    }
+    if (markup) form.set("markup", await (await fetch(markup)).blob(), "markup.png");
+    body = form;
   }
-
-  const form = new FormData();
-  form.set("model", model);
-  form.set("prompt", prompt);
-  form.set("n", String(count));
-  form.set("size", size);
-  form.set("quality", quality);
-  form.set("background", background);
-  form.set("response_format", "b64_json");
-  const imageField = images.length > 1 ? "image[]" : "image";
-  for (const dataUrl of images) {
-    form.append(imageField, await (await fetch(dataUrl)).blob(), "ref.png");
-  }
-  const edited = await request({
+  const data = await request({
     method: "post",
-    url: \`\${baseUrl}/v1/images/edits\`,
-    headers: {
-      Authorization: \`Bearer \${apiKey}\`,
-    },
-    data: form,
+    url: baseUrl.replace(/\\/$/, "") + "/v1/images/" + (images.length ? "edits" : "generations"),
+    headers: { Authorization: "Bearer " + apiKey, ...(images.length ? {} : { "Content-Type": "application/json" }) },
+    data: body,
   });
-  const urls = [];
-  for (const item of edited.data || []) {
-    urls.push(item.b64_json ? \`data:image/png;base64,\${item.b64_json}\` : item.url);
-  }
-  return urls;
+  const format = data.output_format || output_format || "png";
+  const mimeType = "image/" + (format === "svg" ? "svg+xml" : format);
+  return (data.data || []).map((item) => item.b64_json
+    ? "data:" + mimeType + ";base64," + item.b64_json
+    : item.url);
 }
-
-return await generateImage({
-  prompt,
-  images,
-  params,
-  model,
-  baseUrl,
-  apiKey,
-  request,
-});`,
+return await generateImage({ prompt, images, params, model, baseUrl, apiKey, request });`,
         },
         {
             label: i18n.t("modelPlugin.templates.gemini"),
@@ -972,7 +932,7 @@ return await generateText({
 }
 
 /** Normalize whatever an image script returns into the app's generated-image shape. */
-export function normalizePluginImages(result: unknown): string[] {
+export function normalizePluginImages(result: unknown, format = "png"): string[] {
     const items = Array.isArray(result) ? result : [result];
     const urls = items
         .map((item) => {
@@ -981,7 +941,7 @@ export function normalizePluginImages(result: unknown): string[] {
                 const record = item as Record<string, unknown>;
                 if (typeof record.dataUrl === "string") return record.dataUrl;
                 if (typeof record.url === "string") return record.url;
-                if (typeof record.b64_json === "string") return `data:image/png;base64,${record.b64_json}`;
+                if (typeof record.b64_json === "string") return `data:${imageMimeType(typeof record.output_format === "string" ? record.output_format : format)};base64,${record.b64_json}`;
             }
             return "";
         })

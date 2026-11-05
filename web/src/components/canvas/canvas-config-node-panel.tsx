@@ -1,3 +1,4 @@
+import { pickImageGenerationSettings } from "@/lib/image-generation-settings";
 import type { CSSProperties } from "react";
 import { Image as ImageIcon, LoaderCircle, MessageSquare, Music2, Play, Settings2, Square, Video } from "lucide-react";
 import { Button, Segmented } from "antd";
@@ -150,6 +151,7 @@ function InputChip({ label, value, style }: { label: string; value: string; styl
 function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: CanvasGenerationMode): AiConfig {
     return {
         ...globalConfig,
+        ...pickImageGenerationSettings(globalConfig, node.metadata),
         model: resolveModelForCapability(globalConfig, node.metadata?.model, mode),
         reasoningEffort: node.metadata?.reasoningEffort || globalConfig.reasoningEffort || defaultConfig.reasoningEffort,
         quality: node.metadata?.quality || globalConfig.quality || defaultConfig.quality,

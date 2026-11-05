@@ -88,6 +88,7 @@ function fileExtension(mimeType: string, kind: Asset["kind"]) {
     if (mimeType.includes("jpeg")) return "jpg";
     if (mimeType.includes("webp")) return "webp";
     if (mimeType.includes("gif")) return "gif";
+    if (mimeType.includes("svg")) return "svg";
     if (mimeType.includes("mp4")) return "mp4";
     if (mimeType.includes("webm")) return "webm";
     return kind === "image" ? "png" : "bin";

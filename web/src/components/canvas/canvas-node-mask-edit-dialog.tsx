@@ -10,6 +10,7 @@ import { useImageEditorViewport } from "@/components/canvas/use-image-editor-vie
 export type CanvasImageMaskEditPayload = {
     prompt: string;
     maskDataUrl: string;
+    markupDataUrl: string;
     generate: boolean;
 };
 
@@ -22,7 +23,7 @@ const defaultBrushSize = 100;
 const maskOverlayColor = "#2563eb";
 const maskOverlayAlpha = 0.4;
 
-export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (payload: CanvasImageMaskEditPayload) => void }) {
+export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm, exportLabel }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (payload: CanvasImageMaskEditPayload) => void; exportLabel?: string }) {
     const { t } = useTranslation();
     const maskCanvasRef = useRef<HTMLCanvasElement>(null);
     const previewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -210,7 +211,7 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
         if (!nextPrompt) return setError(t("canvas.editors.maskPromptRequired"));
         if (!canvas || !element) return;
         if (!canvasHasPaint(canvas)) return setError(t("canvas.editors.maskRequired"));
-        onConfirm({ prompt: nextPrompt, maskDataUrl: buildMaskOverlay(element, canvas), generate });
+        onConfirm({ prompt: nextPrompt, maskDataUrl: buildMaskOverlay(element, canvas), markupDataUrl: canvas.toDataURL("image/png"), generate });
     };
 
     return (
@@ -327,7 +328,7 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
                         </Button>
                         <div className="flex items-center gap-2">
                             <Button icon={<ImagePlus className="size-4" />} onClick={() => submit(false)}>
-                                {t("canvas.editors.maskExport")}
+                                {exportLabel || t("canvas.editors.maskExport")}
                             </Button>
                             <Button type="primary" icon={<WandSparkles className="size-4" />} onClick={() => submit(true)}>
                                 {t("canvas.editors.maskGenerate")}

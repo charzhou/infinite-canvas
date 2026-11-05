@@ -1,3 +1,4 @@
+import { imageFileExtension, pickImageGenerationSettings } from "@/lib/image-generation-settings";
 import { defaultConfig, resolveModelForCapability, type AiConfig } from "@/stores/use-config-store";
 import i18n from "@/i18n";
 import { ensureImagePreview, resolveImageUrl, uploadImage } from "@/services/image-storage";
@@ -9,8 +10,8 @@ import type { CanvasImageAngleParams } from "@/components/canvas/canvas-node-ang
 import type { ReferenceImage } from "@/types/image";
 import { CanvasNodeType, type CanvasAssistantSession, type CanvasConnection, type CanvasNodeData, type CanvasNodeMetadata } from "@/types/canvas";
 
-export function imageExtension(dataUrl: string) {
-    return dataUrl.match(/^data:image[/]([^;]+)/)?.[1] || dataUrl.match(/image[/]([^;]+)/)?.[1] || "png";
+export function imageExtension(dataUrl: string, mimeType?: string) {
+    return imageFileExtension(mimeType || dataUrl);
 }
 
 export function audioExtension(mimeType?: string) {
@@ -36,7 +37,7 @@ export async function resolveMetadataReferences(metadata: CanvasNodeMetadata) {
     const references = await Promise.all(
         metadata.references.map(async (url, index) => {
             const dataUrl = url.startsWith("image:") ? await resolveImageUrl(url, "") : url;
-            return dataUrl ? { id: `${index}`, name: `reference-${index}.png`, type: "image/png", dataUrl, storageKey: url.startsWith("image:") ? url : undefined } : null;
+            return dataUrl ? { id: `${index}`, name: `reference-${index}.png`, type: "", dataUrl, storageKey: url.startsWith("image:") ? url : undefined, ...(url === metadata.markupReference ? { role: "markup" as const, markupTarget: metadata.markupTarget } : {}) } : null;
         }),
     );
     return references.every(Boolean) ? (references as ReferenceImage[]) : null;
@@ -117,6 +118,7 @@ export function getInputSummary(inputs: NodeGenerationInput[]) {
 export function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefined, mode: CanvasNodeGenerationMode): AiConfig {
     return {
         ...config,
+        ...pickImageGenerationSettings(config, node?.metadata),
         model: resolveModelForCapability(config, node?.metadata?.model, mode),
         reasoningEffort: node?.metadata?.reasoningEffort || config.reasoningEffort || defaultConfig.reasoningEffort,
         quality: node?.metadata?.quality || config.quality || defaultConfig.quality,

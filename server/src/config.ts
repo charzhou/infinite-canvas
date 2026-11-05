@@ -27,6 +27,8 @@ const oidcModelCatalog: OidcCatalogModel[] = [
     { id: "openai/gpt-image-2", scope: "llm:openai:gpt-image-2", platform: "openai", name: "gpt-image-2", apiFormat: "openai", capability: "image" },
     { id: "openai/gpt-image-2.5-sunburst", scope: "llm:openai:gpt-image-2.5-sunburst", platform: "openai", name: "gpt-image-2.5-sunburst", apiFormat: "openai", capability: "image" },
     { id: "openai/gpt-image-2.5-flare", scope: "llm:openai:gpt-image-2.5-flare", platform: "openai", name: "gpt-image-2.5-flare", apiFormat: "openai", capability: "image" },
+    { id: "openai/gpt-image-2.6-sunburst", scope: "llm:openai:gpt-image-2.6-sunburst", platform: "openai", name: "gpt-image-2.6-sunburst", apiFormat: "openai", capability: "image" },
+    { id: "openai/gpt-image-2.6-flare", scope: "llm:openai:gpt-image-2.6-flare", platform: "openai", name: "gpt-image-2.6-flare", apiFormat: "openai", capability: "image" },
     { id: "openai/seedance-2.0", scope: "llm:openai:seedance-2.0", platform: "openai", name: "seedance-2.0", apiFormat: "ark", capability: "video" },
     { id: "openai/seedance-2.5", scope: "llm:openai:seedance-2.5", platform: "openai", name: "seedance-2.5", apiFormat: "ark", capability: "video" },
     { id: "openai/seedance-2.0-mini", scope: "llm:openai:seedance-2.0-mini", platform: "openai", name: "seedance-2.0-mini", apiFormat: "ark", capability: "video" },

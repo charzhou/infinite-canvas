@@ -1,3 +1,5 @@
+import type { ImageGenerationSettings } from "@/lib/image-generation-settings";
+
 export type Position = {
     x: number;
     y: number;
@@ -44,7 +46,10 @@ export type CanvasNodeText = {
     content: string;
 };
 
-export type CanvasNodeMetadata = {
+export type CanvasNodeMetadata = Partial<ImageGenerationSettings> & {
+    imageRole?: "markup";
+    markupReference?: string;
+    markupTarget?: string;
     content?: string;
     composerContent?: string;
     prompt?: string;

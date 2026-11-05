@@ -5,6 +5,20 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+## GPT Image 2.6 in the image workbench and canvas
+
+- Both the image workbench and canvas image/config nodes expose output format, complexity, GIF timing, JPEG/WebP compression and optional SVG author settings. The model catalog includes Sunburst and Flare; OIDC requires corresponding scopes allowed by the authorization service and fresh authorization.
+- GIF uses 2–16 frames (default 9), 20–2000 ms per frame (default 200, rounded to 10 ms), and auto size when first selected. Explicit dimensions describe each frame, allow small multiples of 16, and remain subject to the model's pixel budget.
+- GIF/SVG are generation-only. SVG sends n=1 per request; batches use independent requests. Empty SVG author settings omit the svg object; explicit selection requires access. Neither format sends compression, streaming or partial-image options.
+- Markup editing is available from a workbench reference image and the canvas local-edit dialog. Supported GPT Image 2.5/2.6 models receive the original first and a separate transparent PNG as markup, with matching dimensions, transparency, a 50 MB file limit and a 16777216-pixel limit. Other canvas models keep existing composite references. Removing the targeted original must report an error rather than edit another image.
+- History, node settings, retry and duplication must retain all new parameters and markup roles. Referenced original/markup files must survive deletion of their source nodes and remain in project ZIP exports and WebDAV synchronization.
+- GIF playback and SVG vectors must survive local persistence, refresh, previews, individual/batch downloads, saving to assets and ZIP export/import, with the correct MIME and extensions. Both formats bypass static WebP thumbnails.
+- Plugin SDK: ai.generateImage accepts outputFormat, complexity, frameCount, frameDurationMs, outputCompression, svg and markup. Explicit options override host defaults and use the same request validation.
+- Newly inserted OpenAI image scripts pass new parameters and markup, and decode the selected format correctly. Saved custom scripts remain user-controlled. Unsupported edit formats, SVG edit references and invalid GIF/compression settings must fail before a generation request.
+- No compilation, syntax checks, tests, builds or paid generation were run for this release. GIF/SVG access, SVG author permissions, gateway forwarding and output quality require manual acceptance. GIF editing remains disabled because the API reference and guide disagree.
+
+## Other pending checks
+
 The current release needs manual verification in these areas:
 
 - Ark Compute Access: newly discovered or imported Seedance / doubao-seedance video models default to Ark; explicit protocols take precedence and saved Cangyuan configurations are not rewritten. Only video models show Ark in the API Key dialog, refreshing preserves saved protocols, and the OIDC Seedance catalog uses Ark with unchanged scopes. Ordinary channels and non-video models cannot use Ark.

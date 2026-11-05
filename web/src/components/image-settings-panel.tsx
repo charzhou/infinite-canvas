@@ -5,7 +5,8 @@ import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import { type CanvasTheme } from "@/lib/canvas-theme";
 import { computeMediaSize, inferMediaRatio, inferMediaScale, mediaRatioOptions, mediaScaleOptions, readMediaDimensions } from "@/lib/media-size";
-import type { AiConfig } from "@/stores/use-config-store";
+import { resolveModelRequestConfig, type AiConfig } from "@/stores/use-config-store";
+import { imageOutputFormat, supportsImage26, type ImageSettingKey } from "@/lib/image-generation-settings";
 
 const qualityOptions = [
     { value: "auto", labelKey: "auto" },
@@ -23,7 +24,7 @@ export const imageScaleOptions = mediaScaleOptions.map((value) => ({ value, labe
 
 type ImageSettingsPanelProps = {
     config: AiConfig;
-    onConfigChange: (key: "quality" | "size" | "count" | "background", value: string) => void;
+    onConfigChange: (key: ImageSettingKey, value: string) => void;
     theme: CanvasTheme;
     showTitle?: boolean;
     className?: string;
@@ -38,6 +39,10 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
     const activeSize = config.size || "auto";
     const transparentBackground = config.background === "transparent";
+    const modelConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    const isGptImage = modelConfig.apiFormat === "openai" && /gpt-image/.test(modelConfig.model);
+    const isImage26 = isGptImage && supportsImage26(modelConfig.model);
+    const format = isGptImage ? imageOutputFormat(modelConfig.model, config.imageOutputFormat) : "png";
     const selectedScale = inferMediaScale(activeSize);
     const selectedRatio = inferMediaRatio(activeSize);
     const dimensions = readMediaDimensions(activeSize, selectedScale, selectedRatio);
@@ -63,6 +68,43 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 }}
             >
                 {showTitle ? <div className="text-lg font-semibold">{t("settingsPanels.image.title")}</div> : null}
+                {isGptImage ? <div className="space-y-2.5">
+                    <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.outputFormat")}</SettingTitle>
+                    <div className="grid grid-cols-3 gap-2.5">
+                        {(isImage26 ? ["png", "jpeg", "webp", "gif", "svg"] : ["png", "jpeg", "webp"]).map((value) => <OptionPill key={value} selected={format === value} theme={theme} onClick={() => { onConfigChange("imageOutputFormat", value); if (value === "gif" && format !== "gif") onConfigChange("size", "auto"); }}>{value.toUpperCase()}</OptionPill>)}
+                    </div>
+                    {format === "gif" || format === "svg" ? <div className="text-xs" style={{ color: theme.node.muted }}>{t("settingsPanels.image.generationOnly")}</div> : null}
+                </div> : null}
+                {isImage26 ? <div className="space-y-2.5">
+                    <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.complexity")}</SettingTitle>
+                    <div className="grid grid-cols-4 gap-2.5">
+                        {["auto", "low", "medium", "high"].map((value) => <OptionPill key={value} selected={config.imageComplexity === value} theme={theme} onClick={() => onConfigChange("imageComplexity", value)}>{t(`settingsPanels.common.${value}`)}</OptionPill>)}
+                    </div>
+                    <div className="text-xs" style={{ color: theme.node.muted }}>{t("settingsPanels.image.complexityHint")}</div>
+                </div> : null}
+                {isImage26 && format === "gif" ? <div className="grid grid-cols-2 gap-2.5">
+                    {([{ key: "imageFrameCount", label: "frameCount", min: 2, max: 16, step: 1 }, { key: "imageFrameDurationMs", label: "frameDuration", min: 20, max: 2000, step: 10 }] as const).map((field) => <label key={field.key} className="space-y-2 text-xs">
+                        <span style={{ color: theme.node.muted }}>{t(`settingsPanels.image.${field.label}`)}</span>
+                        <input type="number" min={field.min} max={field.max} step={field.step} value={config[field.key]} onChange={(event) => onConfigChange(field.key, event.target.value)} className="h-9 w-full rounded-lg border bg-transparent px-2 outline-none" style={{ borderColor: theme.node.stroke }} />
+                    </label>)}
+                </div> : null}
+                {isImage26 && format === "svg" ? <div className="space-y-2.5">
+                    <label className="block space-y-2 text-xs">
+                        <span style={{ color: theme.node.muted }}>{t("settingsPanels.image.svgModel")}</span>
+                        <input value={config.imageSvgModel} onChange={(event) => onConfigChange("imageSvgModel", event.target.value)} placeholder={t("settingsPanels.image.svgModelPlaceholder")} className="h-9 w-full rounded-lg border bg-transparent px-2 outline-none" style={{ borderColor: theme.node.stroke }} />
+                    </label>
+                    <div className="text-xs" style={{ color: theme.node.muted }}>{t("settingsPanels.image.svgModelHint")}</div>
+                    <label className="flex items-center justify-between gap-2 text-xs">
+                        <span style={{ color: theme.node.muted }}>{t("settingsPanels.image.svgReasoning")}</span>
+                        <select value={config.imageSvgReasoningEffort} disabled={!config.imageSvgModel.trim()} onChange={(event) => onConfigChange("imageSvgReasoningEffort", event.target.value)} className="h-9 rounded-lg border px-2 disabled:opacity-50" style={{ borderColor: theme.node.stroke, background: theme.toolbar.panel, color: theme.node.text }}>
+                            {["auto", "none", "minimal", "low", "medium", "high", "xhigh", "max"].map((value) => <option key={value} value={value}>{t(`settingsPanels.common.${value}`)}</option>)}
+                        </select>
+                    </label>
+                </div> : null}
+                {isGptImage && (format === "jpeg" || format === "webp") ? <label className="flex items-center justify-between gap-2 text-xs">
+                    <span style={{ color: theme.node.muted }}>{t("settingsPanels.image.compression")}</span>
+                    <input type="number" min={0} max={100} value={config.imageOutputCompression} placeholder={t("settingsPanels.common.auto")} onChange={(event) => onConfigChange("imageOutputCompression", event.target.value)} className="h-9 w-24 rounded-lg border bg-transparent px-2 outline-none" style={{ borderColor: theme.node.stroke }} />
+                </label> : null}
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.quality")}</SettingTitle>
                     <div className="grid grid-cols-3 gap-2.5">
@@ -127,7 +169,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         </div>
                     </div>
                     <span onMouseDown={(event) => event.stopPropagation()}>
-                        <Switch size="small" checked={transparentBackground} onChange={(checked) => onConfigChange("background", checked ? "transparent" : "")} />
+                        <Switch size="small" disabled={format !== "png" && format !== "webp"} checked={transparentBackground && (format === "png" || format === "webp")} onChange={(checked) => onConfigChange("background", checked ? "transparent" : "")} />
                     </span>
                 </div>
                 <div className="space-y-2.5">

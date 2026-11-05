@@ -1,3 +1,4 @@
+import { pickImageGenerationSettings } from "@/lib/image-generation-settings";
 import { getNodeSpec, NODE_DEFAULT_SIZE } from "@/constant/canvas";
 import { nodeSizeFromRatio } from "@/lib/canvas/canvas-node-size";
 import type { AiConfig } from "@/stores/use-config-store";
@@ -41,12 +42,16 @@ export function referenceUrl(image: ReferenceImage) {
 }
 
 export function buildImageGenerationMetadata(type: CanvasImageGenerationType, config: AiConfig, count: number, references: ReferenceImage[]): CanvasNodeMetadata {
+    const markup = references.find((image) => image.role === "markup");
     return {
+        ...pickImageGenerationSettings(config),
         generationType: type,
+        markupReference: markup ? referenceUrl(markup) : undefined,
+        markupTarget: markup?.markupTarget,
         model: config.model,
         size: config.size,
         quality: config.quality,
-        ...(config.background ? { background: config.background } : {}),
+        background: config.background,
         count,
         references: references.map(referenceUrl).filter((url): url is string => Boolean(url)),
     };

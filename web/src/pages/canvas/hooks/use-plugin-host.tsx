@@ -51,9 +51,24 @@ export function usePluginHost(params: PluginHostParams) {
         };
         return {
             generateImage: async (prompt, options) => {
-                const config = { ...buildGenerationConfig(effectiveConfig, undefined, "image"), count: String(options?.count || 1), ...(options?.model ? { model: options.model } : {}), ...(options?.size ? { size: options.size } : {}) };
+                const base = buildGenerationConfig(effectiveConfig, undefined, "image");
+                const config = {
+                    ...base,
+                    count: String(options?.count || 1),
+                    model: options?.model || base.model,
+                    size: options?.size || base.size,
+                    quality: options?.quality || base.quality,
+                    imageOutputFormat: options?.outputFormat ?? base.imageOutputFormat,
+                    imageComplexity: options?.complexity ?? base.imageComplexity,
+                    imageFrameCount: String(options?.frameCount ?? base.imageFrameCount),
+                    imageFrameDurationMs: String(options?.frameDurationMs ?? base.imageFrameDurationMs),
+                    imageOutputCompression: String(options?.outputCompression ?? base.imageOutputCompression),
+                    imageSvgModel: options?.svg?.model ?? base.imageSvgModel,
+                    imageSvgReasoningEffort: options?.svg?.reasoningEffort ?? base.imageSvgReasoningEffort,
+                };
                 ensureReady(config);
                 const references = toReferences(options?.references);
+                if (options?.markup) references.push({ id: "plugin-markup", name: "markup.png", type: "image/png", dataUrl: options.markup, role: "markup" });
                 const items = references.length ? await requestEdit(config, prompt, references, { signal: options?.signal }) : await requestGeneration(config, prompt, { signal: options?.signal });
                 const images = await Promise.all(items.map(async (item) => {
                     try {

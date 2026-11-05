@@ -6,12 +6,14 @@ import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
 
 import { ImageSettingsPanel } from "@/components/image-settings-panel";
+import { CanvasNodeMaskEditDialog, type CanvasImageMaskEditPayload } from "@/components/canvas/canvas-node-mask-edit-dialog";
+import { imageFileExtension, imageSettingKeys, pickImageGenerationSettings, supportsImageMarkup, type ImageGenerationSettings } from "@/lib/image-generation-settings";
 import { ModelPicker } from "@/components/model-picker";
 import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
 import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { imageReferenceLabel } from "@/lib/image-reference-prompt";
-import { modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { modelOptionLabel, resolveModelRequestConfig, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { nanoid } from "nanoid";
 import { formatBytes, formatDuration } from "@/lib/image-utils";
@@ -59,7 +61,7 @@ type GenerationLog = {
     images: GeneratedImage[];
 };
 
-type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "size" | "count">;
+type GenerationLogConfig = ImageGenerationSettings & Pick<AiConfig, "model" | "imageModel" | "quality" | "size" | "count" | "background">;
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
@@ -81,6 +83,7 @@ export default function ImagePage() {
     const addAsset = useAssetStore((state) => state.addAsset);
     const [prompt, setPrompt] = useState("");
     const [references, setReferences] = useState<ReferenceImage[]>([]);
+    const [markupTarget, setMarkupTarget] = useState<ReferenceImage | null>(null);
     const [results, setResults] = useState<GenerationResult[]>([]);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
     const [running, setRunning] = useState(false);
@@ -102,6 +105,8 @@ export default function ImagePage() {
     const agentTaskIdRef = useRef<string | undefined>(undefined);
 
     const model = effectiveConfig.imageModel || effectiveConfig.model;
+    const requestConfig = resolveModelRequestConfig(effectiveConfig, model);
+    const canMarkup = requestConfig.apiFormat === "openai" && supportsImageMarkup(requestConfig.model);
     const canGenerate = Boolean(prompt.trim());
     const generationCount = Math.max(1, Math.min(10, Number(config.count) || 1));
 
@@ -230,12 +235,12 @@ export default function ImagePage() {
     }, [autoRunToken]);
 
     const downloadImage = (image: GeneratedImage, index: number) => {
-        saveAs(image.dataUrl, `image-${index + 1}.png`);
+        saveAs(image.dataUrl, `image-${index + 1}.${imageFileExtension(image.mimeType || image.dataUrl)}`);
     };
 
     const addResultToReferences = async (image: GeneratedImage, index: number) => {
         const stored = await uploadImage(image.dataUrl);
-        setReferences((value) => [...value, { id: nanoid(), name: `result-${index + 1}.png`, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }]);
+        setReferences((value) => [...value, { id: nanoid(), name: `result-${index + 1}.${imageFileExtension(stored.mimeType)}`, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }]);
         message.success(t("imageWorkbench.addedReference"));
     };
 
@@ -298,8 +303,7 @@ export default function ImagePage() {
         setPrompt(log.prompt);
         setReferences(log.references || []);
         if (log.config.imageModel || log.model) updateConfig("imageModel", log.config.imageModel || log.model);
-        if (log.config.quality) updateConfig("quality", log.config.quality);
-        if (log.config.size) updateConfig("size", log.config.size);
+        imageSettingKeys.forEach((key) => updateConfig(key, log.config[key] ?? config[key]));
         if (log.config.count) updateConfig("count", log.config.count);
         setResults(log.images.map((image) => ({ id: image.id, status: "success", image })));
     };
@@ -316,6 +320,21 @@ export default function ImagePage() {
             return null;
         }
         return { text, config: { ...effectiveConfig, model, count: "1" }, references: [...references] };
+    };
+
+    const applyMarkup = async (payload: CanvasImageMaskEditPayload) => {
+        if (!markupTarget) return;
+        try {
+            const stored = await uploadImage(payload.markupDataUrl);
+            const layer: ReferenceImage = { id: nanoid(), name: "markup.png", type: "image/png", dataUrl: stored.url, storageKey: stored.storageKey, role: "markup", markupTarget: markupTarget.storageKey || markupTarget.dataUrl };
+            setReferences((items) => [markupTarget, ...items.filter((item) => item.id !== markupTarget.id && item.role !== "markup"), layer]);
+            setPrompt(payload.prompt);
+            if (["gif", "svg"].includes(effectiveConfig.imageOutputFormat)) updateConfig("imageOutputFormat", "png");
+            setMarkupTarget(null);
+            if (payload.generate) setAutoRunToken((value) => value + 1);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("common.imageReadFailed"));
+        }
     };
 
     const runGenerationSlot = async (index: number, snapshot: { text: string; config: AiConfig; references: ReferenceImage[] }) => {
@@ -453,8 +472,9 @@ export default function ImagePage() {
                                     {references.map((item, index) => (
                                         <div key={item.id} className="group relative size-20 shrink-0 overflow-hidden rounded-md border border-stone-200 dark:border-stone-800">
                                             <img src={previewUrlFor(item.storageKey) || item.dataUrl} alt={item.name} className="size-full object-cover" />
-                                            <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{imageReferenceLabel(index)}</span>
-                                            <ReferenceOrderButtons index={index} total={references.length} onMove={(offset) => setReferences((value) => moveListItem(value, index, offset))} />
+                                            <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{item.role === "markup" ? t("settingsPanels.image.markupLayer") : imageReferenceLabel(references.slice(0, index).filter((ref) => ref.role !== "markup").length)}</span>
+                                            {canMarkup && !running && !item.role && item.type !== "image/svg+xml" ? <button type="button" title={t("settingsPanels.image.markup")} aria-label={t("settingsPanels.image.markup")} className="absolute right-1 top-8 flex size-6 items-center justify-center rounded bg-black/60 text-white" onClick={() => setMarkupTarget(item)}><PenLine className="size-3.5" /></button> : null}
+                                            {!references.some((ref) => ref.role === "markup") ? <ReferenceOrderButtons index={index} total={references.length} onMove={(offset) => setReferences((value) => moveListItem(value, index, offset))} /> : null}
                                             <button
                                                 type="button"
                                                 className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded bg-black/60 text-white group-hover:flex"
@@ -545,6 +565,7 @@ export default function ImagePage() {
                     <GenerationSettings config={effectiveConfig} model={model} updateConfig={updateConfig} openConfigDialog={openConfigDialog} />
                 </div>
             </Drawer>
+            <CanvasNodeMaskEditDialog dataUrl={markupTarget?.dataUrl || ""} open={Boolean(markupTarget)} onClose={() => setMarkupTarget(null)} onConfirm={(payload) => void applyMarkup(payload)} exportLabel={t("settingsPanels.image.applyMarkup")} />
             <PromptSelectDialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen} onSelect={setPrompt} />
             <AssetPickerModal open={assetPickerOpen} defaultTab="my-assets" onInsert={(payload) => void insertPickedAsset(payload)} onClose={() => setAssetPickerOpen(false)} />
             <Modal title={t("workbench.deleteLogs")} open={deleteConfirmOpen} onCancel={() => setDeleteConfirmOpen(false)} onOk={deleteSelectedLogs} okText={t("common.delete")} okButtonProps={{ danger: true }} cancelText={t("common.cancel")}>
@@ -565,7 +586,7 @@ function GenerationSettings({ config, model, updateConfig, openConfigDialog }: {
                 <ModelPicker config={config} value={model} onChange={(value) => updateConfig("imageModel", value)} capability="image" fullWidth onMissingConfig={() => openConfigDialog(false)} />
             </label>
             <div className="col-span-2">
-                <ImageSettingsPanel config={config} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-4" maxCount={10} />
+                <ImageSettingsPanel config={{ ...config, model }} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-4" maxCount={10} />
             </div>
         </>
     );
@@ -827,6 +848,8 @@ function serializeLog(log: GenerationLog): GenerationLog {
 
 function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
     return {
+        ...pickImageGenerationSettings(log.config || {}),
+        background: log.config?.background || "",
         model: log.config?.model || log.model || "",
         imageModel: log.config?.imageModel || log.model || "",
         quality: log.config?.quality || log.quality || "",
@@ -875,11 +898,13 @@ function buildLog({
     images: GeneratedImage[];
 }): GenerationLog {
     const logConfig = {
+        ...pickImageGenerationSettings(config),
         model: config.model,
         imageModel: config.imageModel,
         quality: config.quality,
         size: config.size,
         count: config.count,
+        background: config.background,
     };
     return {
         id: nanoid(),

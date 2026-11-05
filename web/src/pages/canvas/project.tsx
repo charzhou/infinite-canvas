@@ -1,3 +1,4 @@
+import { pickImageGenerationSettings, supportsImageMarkup } from "@/lib/image-generation-settings";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent as ReactChangeEvent, DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -8,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { requestEdit, requestGeneration, requestImageQuestion } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { createVideoGenerationTask, isVideoPollingPaused, isVideoTaskFailed, storeGeneratedVideo, waitForVideoGenerationTask } from "@/services/api/video";
-import { defaultConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
+import { defaultConfig, resolveModelRequestConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { ensureImagePreview, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { nanoid } from "nanoid";
@@ -1833,7 +1834,10 @@ function InfiniteCanvasPage() {
                 generationType: node.metadata?.generationType,
                 model: node.metadata?.model,
                 size: node.metadata?.size,
+                ...pickImageGenerationSettings(node.metadata || {}),
                 quality: node.metadata?.quality,
+                markupReference: node.metadata?.markupReference,
+                markupTarget: node.metadata?.markupTarget,
                 background: node.metadata?.background,
                 references: node.metadata?.references,
             },
@@ -1854,13 +1858,13 @@ function InfiniteCanvasPage() {
 
     const downloadNodeImage = useCallback((node: CanvasNodeData) => {
         if ((node.type !== CanvasNodeType.Image && node.type !== CanvasNodeType.Video && node.type !== CanvasNodeType.Audio) || !node.metadata?.content) return;
-        saveAs(node.metadata.content, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(node.metadata.content)}`);
+        saveAs(node.metadata.content, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(node.metadata.content, node.metadata.mimeType)}`);
     }, []);
 
     const downloadBatchImage = useCallback((node: CanvasNodeData, imageId: string) => {
         const image = node.metadata?.images?.find((item) => item.id === imageId);
         if (!image?.content) return;
-        saveAs(image.content, `canvas-image-${node.id}-${image.id}.${imageExtension(image.content)}`);
+        saveAs(image.content, `canvas-image-${node.id}-${image.id}.${imageExtension(image.content, image.mimeType)}`);
     }, []);
 
     const captureVideoNodeFrame = useCallback(
@@ -2049,31 +2053,34 @@ function InfiniteCanvasPage() {
         async (node: CanvasNodeData, payload: CanvasImageMaskEditPayload) => {
             if (!node.metadata?.content) return;
             const generationConfig = { ...buildGenerationConfig(effectiveConfig, node, "image"), count: "1", size: node.metadata?.size || "auto" };
+            if (["gif", "svg"].includes(generationConfig.imageOutputFormat)) generationConfig.imageOutputFormat = "png";
             if (payload.generate && !isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;
             }
             const userPrompt = payload.prompt.trim();
-            const prompt = t("canvas.projectPage.maskPrompt", { source: imageReferenceLabel(0), mask: imageReferenceLabel(1), prompt: userPrompt });
+            const modelConfig = resolveModelRequestConfig(generationConfig, generationConfig.model);
+            const nativeMarkup = modelConfig.apiFormat === "openai" && supportsImageMarkup(modelConfig.model);
+            const prompt = nativeMarkup ? userPrompt : t("canvas.projectPage.maskPrompt", { source: imageReferenceLabel(0), mask: imageReferenceLabel(1), prompt: userPrompt });
             setMaskEditNodeId(null);
-            const maskImage = await uploadImage(payload.maskDataUrl);
+            const maskImage = await uploadImage(nativeMarkup ? payload.markupDataUrl : payload.maskDataUrl);
             const maskNodeId = nanoid();
             const childId = nanoid();
             const source = { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey };
-            const maskSource = { id: maskNodeId, name: "mask.png", type: maskImage.mimeType || "image/png", dataUrl: maskImage.url, storageKey: maskImage.storageKey };
+            const maskSource: ReferenceImage = { ...(nativeMarkup ? { role: "markup" as const, markupTarget: source.storageKey || source.dataUrl } : {}), id: maskNodeId, name: "mask.png", type: maskImage.mimeType || "image/png", dataUrl: maskImage.url, storageKey: maskImage.storageKey };
             const references = [source, maskSource];
             const generationMetadata = buildImageGenerationMetadata("edit", generationConfig, 1, references);
-            const childMetadata = payload.generate ? { prompt, status: NODE_STATUS_LOADING, ...generationMetadata } : { prompt };
+            const childMetadata = { ...generationMetadata, prompt, ...(payload.generate ? { status: NODE_STATUS_LOADING } : {}) };
             setNodes((prev) => [
                 ...prev,
                 {
                     id: maskNodeId,
                     type: CanvasNodeType.Image,
-                    title: t("canvas.projectPage.maskNodeTitle"),
+                    title: t(nativeMarkup ? "settingsPanels.image.markupLayer" : "canvas.projectPage.maskNodeTitle"),
                     position: { x: node.position.x, y: node.position.y + node.height + 96 },
                     width: node.width,
                     height: node.height,
-                    metadata: imageMetadata(maskImage),
+                    metadata: { ...imageMetadata(maskImage), ...(nativeMarkup ? { imageRole: "markup" as const, markupTarget: source.storageKey || source.dataUrl } : {}) },
                 },
                 {
                     id: childId,
@@ -2834,6 +2841,7 @@ function InfiniteCanvasPage() {
                     ? {
                           ...effectiveConfig,
                           model: savedImageMetadata.model || effectiveConfig.imageModel || effectiveConfig.model,
+                          ...pickImageGenerationSettings(effectiveConfig, savedImageMetadata),
                           quality: savedImageMetadata.quality || effectiveConfig.quality,
                           size: savedImageMetadata.size || effectiveConfig.size,
                           background: savedImageMetadata.background ?? effectiveConfig.background,
@@ -2916,6 +2924,9 @@ function InfiniteCanvasPage() {
                 };
                 const generationMetadata = savedImageMetadata?.generationType
                     ? {
+                          ...pickImageGenerationSettings(generationConfig),
+                          markupReference: savedImageMetadata.markupReference,
+                          markupTarget: savedImageMetadata.markupTarget,
                           generationType: savedImageMetadata.generationType,
                           model: generationConfig.model,
                           size: generationConfig.size,

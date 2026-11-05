@@ -1,5 +1,6 @@
 import i18n from "@/i18n";
 import type { ReferenceImage } from "@/types/image";
+import { imageFileExtension } from "@/lib/image-generation-settings";
 
 export function formatBytes(bytes: number) {
     if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -59,5 +60,6 @@ export function dataUrlToFile(image: ReferenceImage) {
     for (let index = 0; index < binary.length; index += 1) {
         bytes[index] = binary.charCodeAt(index);
     }
-    return new File([bytes], image.name || "reference.png", { type: mimeType });
+    const name = (image.name || "reference").replace(/\.[a-z0-9+]+$/i, "");
+    return new File([bytes], `${name}.${imageFileExtension(mimeType)}`, { type: mimeType });
 }
