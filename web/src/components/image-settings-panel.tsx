@@ -73,7 +73,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                     <div className="grid grid-cols-3 gap-2.5">
                         {(isImage26 ? ["png", "jpeg", "webp", "gif", "svg"] : ["png", "jpeg", "webp"]).map((value) => <OptionPill key={value} selected={format === value} theme={theme} onClick={() => { onConfigChange("imageOutputFormat", value); if (value === "gif" && format !== "gif") onConfigChange("size", "auto"); }}>{value.toUpperCase()}</OptionPill>)}
                     </div>
-                    {format === "gif" || format === "svg" ? <div className="text-xs" style={{ color: theme.node.muted }}>{t("settingsPanels.image.generationOnly")}</div> : null}
+                    {format === "gif" || format === "svg" ? <div className="text-xs" style={{ color: theme.node.muted }}>{t(`settingsPanels.image.${format === "gif" ? "gifPreviewHint" : "svgGenerationOnly"}`)}</div> : null}
                 </div> : null}
                 {isImage26 ? <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.complexity")}</SettingTitle>

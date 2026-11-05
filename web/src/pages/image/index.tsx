@@ -329,7 +329,7 @@ export default function ImagePage() {
             const layer: ReferenceImage = { id: nanoid(), name: "markup.png", type: "image/png", dataUrl: stored.url, storageKey: stored.storageKey, role: "markup", markupTarget: markupTarget.storageKey || markupTarget.dataUrl };
             setReferences((items) => [markupTarget, ...items.filter((item) => item.id !== markupTarget.id && item.role !== "markup"), layer]);
             setPrompt(payload.prompt);
-            if (["gif", "svg"].includes(effectiveConfig.imageOutputFormat)) updateConfig("imageOutputFormat", "png");
+            if (effectiveConfig.imageOutputFormat === "svg") updateConfig("imageOutputFormat", "png");
             setMarkupTarget(null);
             if (payload.generate) setAutoRunToken((value) => value + 1);
         } catch (error) {

@@ -2053,7 +2053,7 @@ function InfiniteCanvasPage() {
         async (node: CanvasNodeData, payload: CanvasImageMaskEditPayload) => {
             if (!node.metadata?.content) return;
             const generationConfig = { ...buildGenerationConfig(effectiveConfig, node, "image"), count: "1", size: node.metadata?.size || "auto" };
-            if (["gif", "svg"].includes(generationConfig.imageOutputFormat)) generationConfig.imageOutputFormat = "png";
+            if (generationConfig.imageOutputFormat === "svg") generationConfig.imageOutputFormat = "png";
             if (payload.generate && !isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;

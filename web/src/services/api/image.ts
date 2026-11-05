@@ -696,7 +696,7 @@ function parseGeminiImagePayload(payload: GeminiPayload) {
 
 function imageOutputParams(config: AiConfig, editing = false) {
     const format = imageOutputFormat(config.model, config.imageOutputFormat);
-    if (editing && (format === "gif" || format === "svg")) throw new Error(apiText("imageEditFormat"));
+    if (editing && format === "svg") throw new Error(apiText("imageEditFormat"));
     const complexity = supportsImage26(config.model) && ["low", "medium", "high"].includes(config.imageComplexity) ? config.imageComplexity : undefined;
     const params: Record<string, unknown> = { output_format: format, ...(complexity ? { complexity } : {}) };
     if (format === "gif") {
@@ -822,7 +822,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     const script = resolveModelScript(config, config.model || config.imageModel);
     if (script) {
         const quality = normalizeQuality(config.quality);
-        const requestSize = resolveRequestSize(config.size);
+        const requestSize = resolveRequestSize(config.size, output.output_format === "gif");
         const background = imageBackground(config, output.output_format || "png");
         const refs = await Promise.all(sources.map((image) => imageToDataUrl(image)));
         try {
@@ -849,7 +849,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     }
 
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(config.size);
+    const requestSize = resolveRequestSize(config.size, output.output_format === "gif");
     const background = imageBackground(config, output.output_format || "png");
     const formData = new FormData();
     formData.set("model", requestConfig.model);
